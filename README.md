@@ -4,6 +4,16 @@ A standalone drag-and-drop simulator for designing AI system infrastructure and 
 
 **[→ Open the simulator](https://anaishadh.github.io/ai-infra-simulator/)**
 
+## Screenshots
+### Canvas — RAG Pipeline template
+![Canvas screenshot](Prebuilt-1.png)
+
+### Build validator (warnings & suggestions)
+![Build warning](build_check.png)
+
+### Build validator (Errors)
+![Validator screenshot](buildcheck_error.png)
+
 ## Features
 - 43 components across 6 categories (LLM, Memory, Agent, Pipeline, Infra, Observability)
 - Real 2025 market pricing (OpenAI, AWS, Pinecone, Datadog, etc.)
