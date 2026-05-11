@@ -1,0 +1,2718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Infra Simulator</title>
+<style>
+/* Inline icon replacement — no CDN needed */
+.ico { display:inline-flex; align-items:center; justify-content:center; width:1em; height:1em; vertical-align:-0.15em; flex-shrink:0; }
+.ico svg { width:100%; height:100%; }
+</style>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f5f4f0;
+  --bg2: #ffffff;
+  --bg3: #eeece8;
+  --border: rgba(0,0,0,0.1);
+  --border2: rgba(0,0,0,0.18);
+  --text: #1a1a18;
+  --text2: #6b6b67;
+  --text3: #9e9e99;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1a;
+    --bg2: #262624;
+    --bg3: #141413;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #e8e6e0;
+    --text2: #9a9892;
+    --text3: #636360;
+    --shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+}
+
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* TOOLBAR */
+#toolbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 12px; height: 44px;
+  background: var(--bg2);
+  border-bottom: 0.5px solid var(--border);
+  flex-shrink: 0; z-index: 20;
+}
+#toolbar .logo {
+  font-size: 13px; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--text); margin-right: 6px;
+}
+.tb-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 10px; font-size: 12px;
+  border: 0.5px solid var(--border2); border-radius: var(--radius);
+  background: var(--bg2); color: var(--text);
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.12s;
+}
+.tb-btn:hover { background: var(--bg3); }
+.tb-btn i { font-size: 14px; }
+.tb-sep { width: 0.5px; height: 18px; background: var(--border); margin: 0 2px; flex-shrink: 0; }
+.spacer { flex: 1; }
+.tb-hint { font-size: 11px; color: var(--text3); }
+
+/* MAIN */
+#main { display: flex; flex: 1; overflow: hidden; }
+
+/* PALETTE */
+#palette {
+  width: 196px; flex-shrink: 0;
+  background: var(--bg2);
+  border-right: 0.5px solid var(--border);
+  overflow-y: auto; overflow-x: hidden;
+  padding: 6px 0 16px;
+}
+#palette::-webkit-scrollbar { width: 4px; }
+#palette::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.cat-header {
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--text3); padding: 10px 10px 4px;
+}
+.palette-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; margin: 0 4px 1px;
+  border-radius: 6px; cursor: grab;
+  border: 0.5px solid transparent;
+  font-size: 11.5px; color: var(--text);
+  user-select: none; transition: background 0.1s;
+}
+.palette-item:hover { background: var(--bg3); border-color: var(--border); }
+.palette-item:active { cursor: grabbing; opacity: 0.7; }
+.p-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.p-sub { font-size: 10px; color: var(--text3); margin-top: 1px; }
+
+/* CANVAS */
+#canvas-wrap {
+  flex: 1; position: relative; overflow: hidden;
+  background: var(--bg3); cursor: default;
+}
+#canvas-bg {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
+#canvas {
+  position: absolute; top: 0; left: 0;
+  width: 10000px; height: 10000px;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+#svg-layer {
+  position: absolute; top: 0; left: 0;
+  width: 10000px; height: 10000px;
+  pointer-events: all; overflow: visible;
+  fill: none; z-index: 1;
+}
+#svg-layer.connecting { cursor: crosshair; }
+
+/* zoom indicator */
+#zoom-indicator {
+  position: absolute; bottom: 12px; right: 12px;
+  font-size: 11px; color: var(--text3);
+  background: var(--bg2); border: 0.5px solid var(--border);
+  border-radius: 6px; padding: 4px 8px;
+  pointer-events: none; z-index: 10;
+  display: flex; align-items: center; gap: 6px;
+}
+
+/* NODES */
+.node {
+  position: absolute; border-radius: 10px;
+  border: 0.5px solid var(--border2);
+  background: var(--bg2);
+  padding: 10px 12px 8px;
+  cursor: move; min-width: 150px; max-width: 185px;
+  user-select: none;
+  box-shadow: var(--shadow);
+  transition: box-shadow 0.15s;
+  z-index: 2;
+}
+.node:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.13); }
+.node.selected {
+  outline: 2px solid #378ADD;
+  outline-offset: 2px;
+}
+.node-header { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
+.node-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.node-title { font-size: 12px; font-weight: 600; line-height: 1.2; }
+.node-sub { font-size: 10px; color: var(--text3); line-height: 1.3; margin-left: 15px; }
+.node-cost { font-size: 10px; color: var(--text2); margin-top: 5px; margin-left: 15px; }
+
+.port {
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--bg2); border: 1.5px solid;
+  position: absolute; cursor: crosshair; z-index: 5;
+  transition: transform 0.1s, background 0.1s;
+}
+.port:hover { background: currentColor; transform: scale(1.3); }
+.port-out { right: -6px; top: 50%; transform: translateY(-50%); }
+.port-out:hover { transform: translateY(-50%) scale(1.3); }
+.port-in  { left:  -6px; top: 50%; transform: translateY(-50%); }
+.port-in:hover  { transform: translateY(-50%) scale(1.3); }
+
+/* INSPECTOR */
+#inspector {
+  width: 236px; flex-shrink: 0;
+  background: var(--bg2);
+  border-left: 0.5px solid var(--border);
+  overflow-y: auto; overflow-x: hidden;
+  padding: 12px 10px 20px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+#inspector::-webkit-scrollbar { width: 4px; }
+#inspector::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.insp-section-title {
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--text3); margin-bottom: 8px;
+}
+.insp-empty { font-size: 12px; color: var(--text3); text-align: center; padding: 20px 0 8px; }
+.insp-node-name { font-size: 14px; font-weight: 600; margin-bottom: 1px; }
+.insp-node-cat { font-size: 11px; margin-bottom: 10px; font-weight: 500; }
+
+.field-row { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.field-row label { font-size: 10.5px; color: var(--text2); }
+.field-row input,
+.field-row select {
+  font-size: 12px; padding: 5px 8px;
+  border: 0.5px solid var(--border2);
+  border-radius: 6px;
+  background: var(--bg3); color: var(--text);
+  width: 100%;
+}
+.field-row input:focus, .field-row select:focus {
+  outline: none; border-color: #378ADD;
+}
+
+.cost-card {
+  background: var(--bg3); border-radius: var(--radius);
+  padding: 10px 12px;
+  border: 0.5px solid var(--border);
+}
+.cost-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 5px; font-size: 12px; color: var(--text2);
+}
+.cost-row .val { font-weight: 600; color: var(--text); font-size: 13px; }
+.cost-divider { height: 0.5px; background: var(--border); margin: 6px 0; }
+.cost-total { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
+.cost-total .val { color: #378ADD; }
+
+.checklist-item {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; color: var(--text2);
+  padding: 5px 0;
+  border-bottom: 0.5px solid var(--border);
+}
+.check-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.checklist-cat { font-size: 10px; color: var(--text3); margin-left: auto; }
+
+.del-btn {
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  width: 100%; padding: 6px;
+  font-size: 11px;
+  border: 0.5px solid rgba(220, 60, 60, 0.4);
+  border-radius: 6px;
+  background: transparent; color: #c0392b;
+  cursor: pointer; margin-top: 8px;
+  transition: background 0.1s;
+}
+.del-btn:hover { background: rgba(220,60,60,0.08); }
+
+/* EMPTY STATE */
+#empty-state {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center; pointer-events: none;
+  color: var(--text3);
+}
+#empty-state .big-icon { font-size: 40px; margin-bottom: 10px; opacity: 0.4; }
+#empty-state p { font-size: 13px; line-height: 1.6; }
+
+/* CONNECTION LINES */
+.conn-path { fill: none; stroke: var(--border2, #aaa); stroke-width: 1.5; }
+.conn-path:hover { stroke: #378ADD; cursor: pointer; }
+
+/* waypoint handle tooltip */
+.wp-handle { cursor: move; }
+
+/* Validate button accent */
+.tb-btn-validate {
+  border-color: #1D9E75 !important;
+  color: #1D9E75 !important;
+  font-weight: 500;
+}
+.tb-btn-validate:hover { background: rgba(29,158,117,0.08) !important; }
+
+/* Validation overlay */
+#validation-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(2px);
+}
+#validation-panel {
+  background: var(--bg2);
+  border: 0.5px solid var(--border2);
+  border-radius: 14px;
+  width: 540px; max-width: 96vw;
+  max-height: 80vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+}
+#vp-header {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 18px 18px 14px;
+  border-bottom: 0.5px solid var(--border);
+  flex-shrink: 0;
+}
+#vp-title {
+  font-size: 15px; font-weight: 600; flex: 1;
+}
+#vp-summary {
+  font-size: 11px; color: var(--text2);
+  margin-top: 2px;
+}
+#vp-close {
+  background: none; border: none; cursor: pointer;
+  color: var(--text2); padding: 2px; flex-shrink: 0;
+  border-radius: 4px; display: flex; align-items: center;
+}
+#vp-close:hover { background: var(--bg3); }
+#vp-body {
+  overflow-y: auto; flex: 1;
+  padding: 14px 18px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+#vp-body::-webkit-scrollbar { width: 4px; }
+#vp-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.vi-item {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px; border-radius: 8px;
+  border: 0.5px solid;
+  font-size: 12px; line-height: 1.5;
+}
+.vi-item.error   { background: rgba(220,60,60,0.06);  border-color: rgba(220,60,60,0.25); }
+.vi-item.warning { background: rgba(186,117,23,0.06); border-color: rgba(186,117,23,0.25); }
+.vi-item.ok      { background: rgba(29,158,117,0.06); border-color: rgba(29,158,117,0.25); }
+.vi-item.info    { background: rgba(55,138,221,0.06); border-color: rgba(55,138,221,0.25); }
+
+.vi-icon {
+  width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px;
+}
+.vi-icon.error   { color: #c0392b; }
+.vi-icon.warning { color: #BA7517; }
+.vi-icon.ok      { color: #1D9E75; }
+.vi-icon.info    { color: #378ADD; }
+
+.vi-content { flex: 1; }
+.vi-title { font-weight: 600; color: var(--text); margin-bottom: 2px; }
+.vi-desc  { color: var(--text2); }
+.vi-fix   { margin-top: 5px; font-size: 11px; color: var(--text3);
+            padding: 4px 8px; background: var(--bg3);
+            border-radius: 4px; display: inline-block; }
+
+.vi-section-header {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--text3);
+  padding: 4px 0 2px; margin-top: 4px;
+}
+
+#vp-footer {
+  padding: 14px 18px;
+  border-top: 0.5px solid var(--border);
+  flex-shrink: 0;
+}
+#vp-score-wrap { display: flex; align-items: center; gap: 10px; }
+#vp-score-label { font-size: 11px; color: var(--text2); white-space: nowrap; }
+#vp-score-bar-wrap {
+  flex: 1; height: 6px; background: var(--bg3);
+  border-radius: 3px; overflow: hidden;
+}
+#vp-score-bar {
+  height: 100%; border-radius: 3px;
+  transition: width 0.5s ease, background 0.3s;
+}
+#vp-score-val { font-size: 13px; font-weight: 600; min-width: 36px; text-align: right; }
+
+.vp-empty {
+  text-align: center; padding: 28px 0;
+  color: var(--text3); font-size: 13px;
+}
+.vp-empty-icon { font-size: 32px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <span class="logo">⬡ AI Infra Simulator</span>
+    <div class="tb-sep"></div>
+    <select id="template-select" onchange="loadTemplate(this.value);this.value=''" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);cursor:pointer;max-width:200px">
+      <option value="">⬡ Load template…</option>
+      <optgroup label="── Use-case">
+        <option value="rag">Production RAG Pipeline</option>
+        <option value="trading">Autonomous Trading Agent</option>
+        <option value="support">Customer Support Bot</option>
+        <option value="codereview">Code Review Agent</option>
+        <option value="docintel">Document Intelligence</option>
+        <option value="research">Multi-Agent Research</option>
+      </optgroup>
+      <optgroup label="── Build type">
+        <option value="opensource">Full Open Source Stack</option>
+        <option value="enterprise">High-End Enterprise (GPT-4o)</option>
+      </optgroup>
+    </select>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" onclick="clearCanvas()"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/></svg></span> Clear</button>
+    <button class="tb-btn" onclick="exportSpec()"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/><path d="M5 19h14"/></svg></span> Export spec</button>
+    <button class="tb-btn tb-btn-validate" onclick="runValidation()" id="validate-btn">
+      <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/></svg></span>
+      Check build
+    </button>
+    <div class="spacer"></div>
+    <span class="tb-hint">Drag to canvas · Scroll to zoom · Space+drag to pan · Click connection to select</span>
+  </div>
+
+  <div id="main">
+    <div id="palette" id="palette"></div>
+
+    <div id="canvas-wrap">
+      <canvas id="canvas-bg"></canvas>
+      <div id="canvas">
+        <svg id="svg-layer" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <div id="empty-state">
+        <div class="big-icon"><span class="ico" style="width:40px;height:40px;opacity:0.4" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="8" rx="2"/><path d="M7 12h10M3 12H1M23 12h-2"/><circle cx="7" cy="12" r="1" fill="currentColor"/><circle cx="17" cy="12" r="1" fill="currentColor"/></svg></span></div>
+        <p>Drag components from the left panel<br>or load a template to get started</p>
+      </div>
+      <div id="zoom-indicator">
+        <span class="ico" style="font-size:12px;width:12px;height:12px" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M11 8v6M8 11h6"/></svg></span>
+        <span id="zoom-label">100%</span>
+      </div>
+    </div>
+
+    <div id="inspector">
+      <div>
+        <div class="insp-section-title">Inspector</div>
+        <div class="insp-empty" id="insp-empty">Select a node to configure it</div>
+        <div id="insp-content" style="display:none"></div>
+      </div>
+      <div>
+        <div class="insp-section-title">Cost estimate</div>
+        <div class="cost-card">
+          <div class="cost-row"><span>Monthly</span><span class="val" id="cost-month">$0</span></div>
+          <div class="cost-row"><span>Per run</span><span class="val" id="cost-run">$0.0000</span></div>
+          <div class="cost-divider"></div>
+          <div class="cost-total"><span>Nodes placed</span><span class="val" id="cost-count">0</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="insp-section-title">Components on canvas</div>
+        <div id="checklist"><div style="font-size:11px;color:var(--text3)">None yet</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Validation overlay -->
+<div id="validation-overlay" style="display:none">
+  <div id="validation-panel">
+    <div id="vp-header">
+      <div id="vp-title">Build check</div>
+      <div id="vp-summary"></div>
+      <button id="vp-close" onclick="closeValidation()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="vp-body"></div>
+    <div id="vp-footer">
+      <div id="vp-score-wrap">
+        <div id="vp-score-label">Build score</div>
+        <div id="vp-score-bar-wrap"><div id="vp-score-bar"></div></div>
+        <div id="vp-score-val"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CAT_COLORS = {
+  'LLM':          '#7F77DD',
+  'Memory':       '#1D9E75',
+  'Agent':        '#D85A30',
+  'Pipeline':     '#378ADD',
+  'Infra':        '#BA7517',
+  'Observability':'#D4537E'
+};
+
+const COMPONENTS = [
+  // ── LLM ──────────────────────────────────────────────────────
+  // Proprietary LLM
+  // Pricing (blended input+output, 50/50 split, per 1M tokens):
+  //   Large  = GPT-4o ($6.25/M), Claude Sonnet 4 ($9/M), avg ~$6.25
+  //   Medium = GPT-4o-mini ($0.375/M), Gemini Flash ($0.1875/M), avg ~$1.575
+  //   Small  = Gemini Flash / Haiku ($0.375/M avg)
+  // Monthly = (tokensday × 1000 tokens/call × 30days) × $/token
+  { cat:'LLM', id:'llm-prop', name:'Proprietary LLM', sub:'GPT-4o, Claude, Gemini',
+    fields:[{k:'provider',l:'Provider',type:'select',opts:['OpenAI','Anthropic','Google','Cohere']},
+            {k:'tier',l:'Model tier',type:'select',opts:['Large','Medium','Small']},
+            {k:'tokensday',l:'Tokens/day (k)',type:'number',def:500}],
+    // tokensday = thousands of tokens per day
+    // Large: $6.25/1M tokens, Medium: $1.575/1M, Small: $0.375/1M
+    mc:(f)=>{
+      const rate={Large:0.00000625,Medium:0.000001575,Small:0.000000375}[f.tier]||0.00000625;
+      return f.tokensday*1000*rate*30;
+    },
+    rc:(f)=>{
+      const rate={Large:0.00000625,Medium:0.000001575,Small:0.000000375}[f.tier]||0.00000625;
+      return f.tokensday*1000*rate;
+    }
+  },
+
+  // Open Source LLM (self-hosted)
+  // Cost = GPU instance cost (no per-token API fee)
+  // 7B  INT8: needs 1× T4  ($0.526/hr) → ~$380/mo at 24/7
+  // 13B INT8: needs 1× A100-40 ($3.06/hr) → ~$2204/mo
+  // 70B INT8: needs 2× A100-40 → ~$4408/mo
+  // 405B:     needs 4× H100   → ~$13,708/mo
+  // Divided by replicas for per-replica cost, then × replicas
+  { cat:'LLM', id:'llm-oss', name:'Open Source LLM', sub:'Llama, Mistral, Qwen',
+    fields:[{k:'size',l:'Model size',type:'select',opts:['7B','13B','70B','405B']},
+            {k:'quant',l:'Quantization',type:'select',opts:['FP16','INT8','INT4']},
+            {k:'replicas',l:'Replicas',type:'number',def:1}],
+    mc:(f)=>{
+      // Base GPU cost per replica per month (24/7 on-demand)
+      const base={
+        '7B':  {'FP16':756,'INT8':380,'INT4':190},   // T4 FP16 needs 2×T4
+        '13B': {'FP16':2204,'INT8':2204,'INT4':380},  // A100-40 for INT8/INT4
+        '70B': {'FP16':8826,'INT8':4408,'INT4':2204}, // 2×A100-40 INT8
+        '405B':{'FP16':41140,'INT8':20580,'INT4':13720} // 4×H100
+      };
+      return (base[f.size]?.[f.quant]||380)*f.replicas;
+    },
+    rc:(f)=>0 // no per-call cost for self-hosted
+  },
+
+  // Embedding Model
+  // text-embedding-3-small: $0.020/1M tokens
+  // text-embedding-3-large: $0.130/1M tokens
+  // Cohere embed-v3:        $0.100/1M tokens
+  // BGE-M3 self-hosted:     $0 (GPU cost in infra)
+  // qday = queries/day in thousands; assume 512 tokens/query avg
+  { cat:'LLM', id:'llm-emb', name:'Embedding Model', sub:'text-embedding-3, BGE',
+    fields:[{k:'model',l:'Model',type:'select',opts:['text-embedding-3-small','text-embedding-3-large','BGE-M3','Cohere embed-v3']},
+            {k:'qday',l:'Queries/day (k)',type:'number',def:100}],
+    mc:(f)=>{
+      const ratePerMToken={'text-embedding-3-small':0.020,'text-embedding-3-large':0.130,'BGE-M3':0,'Cohere embed-v3':0.100}[f.model]||0.020;
+      // qday×1000 queries × 512 tokens/query = tokens; ÷1M × rate × 30
+      return f.qday*1000*512/1e6*ratePerMToken*30;
+    },
+    rc:(f)=>{
+      const ratePerMToken={'text-embedding-3-small':0.020,'text-embedding-3-large':0.130,'BGE-M3':0,'Cohere embed-v3':0.100}[f.model]||0.020;
+      return f.qday*1000*512/1e6*ratePerMToken;
+    }
+  },
+
+  // Reranker
+  // Cohere Rerank v3: $2.00/1000 queries
+  // Jina Reranker API: $0.018/1000 queries
+  { cat:'LLM', id:'llm-rerank', name:'Reranker Model', sub:'Cohere Rerank, Jina',
+    fields:[{k:'provider',l:'Provider',type:'select',opts:['Cohere Rerank v3','Jina Reranker v2','Self-hosted']},
+            {k:'qday',l:'Queries/day (k)',type:'number',def:50}],
+    mc:(f)=>{
+      const per1k={'Cohere Rerank v3':2.00,'Jina Reranker v2':0.018,'Self-hosted':0}[f.provider]||2.00;
+      return f.qday*per1k*30;
+    },
+    rc:(f)=>{
+      const per1k={'Cohere Rerank v3':2.00,'Jina Reranker v2':0.018,'Self-hosted':0}[f.provider]||2.00;
+      return f.qday*per1k/1000;
+    }
+  },
+
+  // Multimodal Model
+  // GPT-4o vision: ~$0.00384/image (768 tile tokens × $5/1M)
+  // Claude claude-opus-4: ~$0.0048/image
+  // Gemini 1.5 Pro: ~$0.00130/image
+  // Audio (Whisper): $0.006/minute
+  { cat:'LLM', id:'llm-mm', name:'Multimodal Model', sub:'Vision / audio',
+    fields:[{k:'mod',l:'Modality',type:'select',opts:['Vision (GPT-4o)','Vision (Gemini)','Audio (Whisper)','Vision+Audio']},
+            {k:'rday',l:'Requests/day',type:'number',def:1000}],
+    mc:(f)=>{
+      const perReq={'Vision (GPT-4o)':0.00384,'Vision (Gemini)':0.00130,'Audio (Whisper)':0.006,'Vision+Audio':0.0098}[f.mod]||0.00384;
+      return f.rday*perReq*30;
+    },
+    rc:(f)=>{
+      const perReq={'Vision (GPT-4o)':0.00384,'Vision (Gemini)':0.00130,'Audio (Whisper)':0.006,'Vision+Audio':0.0098}[f.mod]||0.00384;
+      return f.rday*perReq;
+    }
+  },
+
+  // ── Memory ───────────────────────────────────────────────────
+  // Vector Database
+  // Pinecone Serverless: $0.096/1M reads + $0.033/GB/mo storage
+  //   1M vectors @1536d ≈ 6GB → $0.198/mo storage
+  //   vecs in k → GB ≈ vecs×1000×1536×4bytes / 1e9 = vecs×6.144/1000 GB
+  // Weaviate Cloud: $69/mo base + usage
+  // Qdrant Cloud: $0.028/GB/mo + $0.032/1M reads
+  // pgvector (RDS): RDS cost only (covered by mem-sql node)
+  { cat:'Memory', id:'mem-vdb', name:'Vector Database', sub:'Pinecone, Weaviate, Qdrant',
+    fields:[{k:'provider',l:'Provider',type:'select',opts:['Pinecone','Weaviate','Qdrant','pgvector']},
+            {k:'vecs',l:'Vectors stored (k)',type:'number',def:1000},
+            {k:'qday',l:'Queries/day (k)',type:'number',def:50}],
+    mc:(f)=>{
+      const gbStored=f.vecs*1000*1536*4/1e9; // 1536-dim float32
+      if(f.provider==='Pinecone'){
+        const storage=gbStored*0.033;
+        const reads=f.qday*30*0.096; // $0.096/1M reads, qday already in k
+        return storage+reads;
+      }
+      if(f.provider==='Weaviate') return 69+gbStored*0.05+f.qday*30*0.05;
+      if(f.provider==='Qdrant')   return gbStored*0.028+f.qday*30*0.032;
+      return 0; // pgvector: cost is in RDS node
+    },
+    rc:(f)=>{
+      if(f.provider==='Pinecone') return f.qday*0.000096;
+      if(f.provider==='Weaviate') return f.qday*0.00005;
+      if(f.provider==='Qdrant')   return f.qday*0.000032;
+      return 0;
+    }
+  },
+
+  // Semantic Cache (Redis)
+  // Redis Cloud: $0.881/GB/mo (beyond 1GB), $7/mo base for 1GB
+  // AWS ElastiCache cache.r7g.large: $0.156/hr = $112.32/mo (26GB)
+  { cat:'Memory', id:'mem-cache', name:'Semantic Cache', sub:'Redis, GPTCache',
+    fields:[{k:'gb',l:'Cache size (GB)',type:'number',def:4},{k:'ttl',l:'TTL (hours)',type:'number',def:24}],
+    mc:(f)=>7+Math.max(0,f.gb-1)*0.881,
+    rc:(f)=>0.0000001 // Redis ops are essentially free per-call
+  },
+
+  // Key-Value Store (Redis / DynamoDB)
+  // Redis Cloud: same as cache pricing
+  // DynamoDB: $0.25/GB/mo + $0.00013/1k reads + $0.00065/1k writes
+  { cat:'Memory', id:'mem-kv', name:'Key-Value Store', sub:'Redis, DynamoDB',
+    fields:[{k:'provider',l:'Provider',type:'select',opts:['Redis Cloud','DynamoDB','Upstash Redis']},
+            {k:'gb',l:'Storage (GB)',type:'number',def:10},
+            {k:'ops',l:'Ops/day (k)',type:'number',def:100}],
+    mc:(f)=>{
+      if(f.provider==='DynamoDB') return f.gb*0.25+f.ops*30*(0.00013+0.00065)/2;
+      if(f.provider==='Upstash Redis') return Math.min(f.gb*0.40+f.ops*30*0.0002, 280); // $0.4/GB + $0.2/1M cmds, max $280
+      return 7+Math.max(0,f.gb-1)*0.881; // Redis Cloud
+    },
+    rc:(f)=>{
+      if(f.provider==='DynamoDB') return f.ops*(0.00013+0.00065)/2000;
+      return f.ops*0.0002/1000;
+    }
+  },
+
+  // Graph Database (Neo4j AuraDB)
+  // AuraDB Pro: $0.09/hr = $64.80/mo base (1GB RAM)
+  // AuraDB Business: $0.36/hr = $259.20/mo (4GB RAM)
+  { cat:'Memory', id:'mem-graph', name:'Graph Database', sub:'Neo4j AuraDB',
+    fields:[{k:'tier',l:'Tier',type:'select',opts:['AuraDB Free','AuraDB Pro','AuraDB Business']},
+            {k:'nodes',l:'Nodes (k)',type:'number',def:100},{k:'qday',l:'Queries/day',type:'number',def:500}],
+    mc:(f)=>{
+      const base={'AuraDB Free':0,'AuraDB Pro':64.80,'AuraDB Business':259.20}[f.tier]||64.80;
+      return base+f.nodes*0.001; // minor storage overage
+    },
+    rc:(f)=>0.0001
+  },
+
+  // Relational DB (AWS RDS Postgres)
+  // db.t4g.medium  2vCPU/4GB:  $0.048/hr = $34.56/mo
+  // db.m7g.large   2vCPU/8GB:  $0.096/hr = $69.12/mo
+  // db.m7g.xlarge  4vCPU/16GB: $0.192/hr = $138.24/mo
+  // db.m7g.2xlarge 8vCPU/32GB: $0.384/hr = $276.48/mo
+  // Storage: $0.115/GB/mo (gp3)
+  { cat:'Memory', id:'mem-sql', name:'Relational DB', sub:'Postgres / RDS',
+    fields:[{k:'instance',l:'Instance',type:'select',opts:['db.t4g.medium (2vCPU/4GB)','db.m7g.large (2vCPU/8GB)','db.m7g.xlarge (4vCPU/16GB)','db.m7g.2xlarge (8vCPU/32GB)']},
+            {k:'gb',l:'Storage (GB)',type:'number',def:20}],
+    mc:(f)=>{
+      const hr={'db.t4g.medium (2vCPU/4GB)':0.048,'db.m7g.large (2vCPU/8GB)':0.096,'db.m7g.xlarge (4vCPU/16GB)':0.192,'db.m7g.2xlarge (8vCPU/32GB)':0.384}[f.instance]||0.096;
+      return hr*720+f.gb*0.115;
+    },
+    rc:(f)=>0.00005
+  },
+
+  // Blob / Object Store (AWS S3)
+  // Storage: $0.023/GB/mo (S3 Standard)
+  // Egress:  $0.09/GB (first 10TB)
+  // PUT/COPY: $0.005/1k requests; GET: $0.0004/1k
+  { cat:'Memory', id:'mem-blob', name:'Blob / Object Store', sub:'AWS S3, GCS',
+    fields:[{k:'provider',l:'Provider',type:'select',opts:['AWS S3','GCS Standard','Azure Blob']},
+            {k:'gb',l:'Storage (GB)',type:'number',def:100},
+            {k:'egress',l:'Egress (GB/mo)',type:'number',def:20}],
+    mc:(f)=>{
+      const sRate={'AWS S3':0.023,'GCS Standard':0.020,'Azure Blob':0.018}[f.provider]||0.023;
+      const eRate={'AWS S3':0.09,'GCS Standard':0.08,'Azure Blob':0.087}[f.provider]||0.09;
+      return f.gb*sRate+f.egress*eRate;
+    },
+    rc:(f)=>0.0000004 // per GET request
+  },
+
+  // Context Window (in-process, no infra cost — cost is in LLM token pricing)
+  { cat:'Memory', id:'mem-ctx', name:'Context Window', sub:'In-context working memory',
+    fields:[{k:'tokens',l:'Token budget (k)',type:'number',def:128}],
+    mc:(f)=>0,
+    rc:(f)=>0 // token cost counted in LLM node
+  },
+
+  // ── Agents ───────────────────────────────────────────────────
+  // Agent costs = LLM API calls (orchestration overhead)
+  // Planner: ~3k tokens/call (complex reasoning), GPT-4o = $0.01875/call
+  // Executor: ~1.5k tokens/call, GPT-4o = $0.009375/call
+  // Evaluator: ~2k tokens/call (judge prompt), GPT-4o = $0.0125/call
+  // Router: ~500 tokens/call (fast routing), GPT-4o-mini = $0.000788/call
+  // Research: Tavily API $5/1000 searches + LLM calls
+  // Coder: E2B sandbox $0.000025/sec exec + LLM calls ~$0.02/run
+
+  { cat:'Agent', id:'ag-plan', name:'Planner Agent', sub:'Strategy & task decomp.',
+    fields:[{k:'llm',l:'LLM backend',type:'select',opts:['GPT-4o','Claude Sonnet 4','Gemini 1.5 Pro','Llama 70B (self-hosted)']},
+            {k:'cday',l:'Calls/day',type:'number',def:200}],
+    mc:(f)=>{
+      // ~3000 tokens/call blended
+      const perCall={'GPT-4o':0.01875,'Claude Sonnet 4':0.0270,'Gemini 1.5 Pro':0.00938,'Llama 70B (self-hosted)':0}[f.llm]||0.01875;
+      return f.cday*perCall*30;
+    },
+    rc:(f)=>{
+      const perCall={'GPT-4o':0.01875,'Claude Sonnet 4':0.0270,'Gemini 1.5 Pro':0.00938,'Llama 70B (self-hosted)':0}[f.llm]||0.01875;
+      return f.cday*perCall;
+    }
+  },
+
+  { cat:'Agent', id:'ag-exec', name:'Executor Agent', sub:'Tool use & actions',
+    fields:[{k:'tools',l:'Tool count',type:'number',def:5},
+            {k:'cday',l:'Calls/day',type:'number',def:500}],
+    // ~1500 tokens/call, GPT-4o pricing
+    mc:(f)=>f.cday*0.009375*30,
+    rc:(f)=>f.cday*0.009375
+  },
+
+  { cat:'Agent', id:'ag-eval', name:'Evaluator / Critic', sub:'Quality assessment',
+    fields:[{k:'method',l:'Eval method',type:'select',opts:['LLM-as-judge (GPT-4o)','LLM-as-judge (GPT-4o-mini)','Embedding sim','Rule-based']},
+            {k:'cday',l:'Evals/day',type:'number',def:200}],
+    mc:(f)=>{
+      const perEval={'LLM-as-judge (GPT-4o)':0.0125,'LLM-as-judge (GPT-4o-mini)':0.000394,'Embedding sim':0.0000102,'Rule-based':0}[f.method]||0.0125;
+      return f.cday*perEval*30;
+    },
+    rc:(f)=>{
+      const perEval={'LLM-as-judge (GPT-4o)':0.0125,'LLM-as-judge (GPT-4o-mini)':0.000394,'Embedding sim':0.0000102,'Rule-based':0}[f.method]||0.0125;
+      return f.cday*perEval;
+    }
+  },
+
+  { cat:'Agent', id:'ag-router', name:'Router / Orchestrator', sub:'Multi-agent routing',
+    fields:[{k:'agents',l:'Agents managed',type:'number',def:3},
+            {k:'cday',l:'Routing calls/day',type:'number',def:1000}],
+    // ~500 tokens/call, GPT-4o-mini at $0.000788/call
+    mc:(f)=>f.cday*0.000788*30,
+    rc:(f)=>f.cday*0.000788
+  },
+
+  { cat:'Agent', id:'ag-research', name:'Research Agent', sub:'Web & tool search',
+    fields:[{k:'calls',l:'Web calls/run',type:'number',def:10},
+            {k:'rday',l:'Runs/day',type:'number',def:50}],
+    // Tavily Search API: $5/1000 searches + GPT-4o synthesis ~$0.025/run
+    mc:(f)=>{
+      const tavilyCost=f.calls*f.rday*0.005*30; // $5/1000 = $0.005/search
+      const llmCost=f.rday*0.025*30;            // synthesis LLM
+      return tavilyCost+llmCost;
+    },
+    rc:(f)=>f.calls*0.005+0.025
+  },
+
+  { cat:'Agent', id:'ag-coder', name:'Code Gen Agent', sub:'Code generation & sandbox',
+    fields:[{k:'lang',l:'Language',type:'select',opts:['Python','TypeScript','Go','Rust']},
+            {k:'sandbox',l:'Sandbox',type:'select',opts:['E2B','Modal','Docker (self-hosted)']}],
+    // E2B: $0.000025/sec × avg 30sec exec = $0.00075/run + LLM $0.02/run
+    // Modal: $0.000030/sec × 30sec = $0.0009/run
+    mc:(f)=>{
+      const sandboxPerRun={'E2B':0.00075,'Modal':0.0009,'Docker (self-hosted)':0}[f.sandbox]||0.00075;
+      return (sandboxPerRun+0.02)*1000*30; // assume 1000 runs/day baseline
+    },
+    rc:(f)=>{
+      const sandboxPerRun={'E2B':0.00075,'Modal':0.0009,'Docker (self-hosted)':0}[f.sandbox]||0.00075;
+      return sandboxPerRun+0.02;
+    }
+  },
+
+  { cat:'Agent', id:'ag-human', name:'Human-in-the-Loop', sub:'Review & approval node',
+    fields:[{k:'freq',l:'Review frequency',type:'select',opts:['Every run','On failure','Sampled 10%']}],
+    mc:(f)=>0, rc:(f)=>0 // labor cost not modeled
+  },
+
+  // ── Pipeline ─────────────────────────────────────────────────
+  // Data Ingestion
+  // AWS Data Transfer in: free; processing via Lambda/Glue
+  // Fivetran: ~$1/1M MAR (monthly active rows); rough ≈ $0.10/GB/day
+  { cat:'Pipeline', id:'pipe-ingest', name:'Data Ingestion', sub:'Source connectors',
+    fields:[{k:'src',l:'Source type',type:'select',opts:['Files (S3)','API (Fivetran)','Database (DMS)','Stream (Kinesis)']},
+            {k:'gbday',l:'Volume (GB/day)',type:'number',def:1}],
+    mc:(f)=>{
+      const perGBmo={'Files (S3)':0.50,'API (Fivetran)':3.00,'Database (DMS)':1.50,'Stream (Kinesis)':1.80}[f.src]||0.50;
+      return f.gbday*perGBmo*30;
+    },
+    rc:(f)=>{
+      const perGB={'Files (S3)':0.50/30,'API (Fivetran)':3.00/30,'Database (DMS)':1.50/30,'Stream (Kinesis)':1.80/30}[f.src]||0.017;
+      return f.gbday*perGB;
+    }
+  },
+
+  // Chunker (compute cost for splitting — minimal, usually in Lambda)
+  // AWS Lambda at 512MB, ~100ms per chunk batch: $0.0000000083/ms × 512MB = negligible
+  { cat:'Pipeline', id:'pipe-chunk', name:'Chunker', sub:'Text splitting',
+    fields:[{k:'strat',l:'Strategy',type:'select',opts:['Fixed','Recursive','Semantic']},
+            {k:'size',l:'Chunk size (tokens)',type:'number',def:512}],
+    // Semantic chunking uses an embedding call: $0.00002/chunk
+    mc:(f)=>f.strat==='Semantic'?50:5,
+    rc:(f)=>f.strat==='Semantic'?0.00002:0.000001
+  },
+
+  // Embedding Pipeline
+  // Batch embedding job orchestration: Lambda + embedding model API
+  // Pipeline orchestration cost is small: ~$20/mo fixed + model cost
+  { cat:'Pipeline', id:'pipe-embed', name:'Embedding Pipeline', sub:'Batch embedding',
+    fields:[{k:'batch',l:'Batch size',type:'number',def:64},
+            {k:'model',l:'Model',type:'select',opts:['text-embedding-3-small','text-embedding-3-large','BGE-M3 (self-hosted)','Cohere embed-v3']}],
+    // Orchestration overhead only; model cost is in llm-emb node
+    mc:(f)=>20, // Lambda/Airflow orchestration: ~$20/mo
+    rc:(f)=>0.0005 // per batch job run
+  },
+
+  // ETL / Transform (AWS Glue or Lambda)
+  // Glue: $0.44/DPU-hr, 2 DPU min = $0.88/hr per job
+  // Lambda batch: $0.0000002/GB-sec
+  { cat:'Pipeline', id:'pipe-etl', name:'ETL / Transform', sub:'Data transformation',
+    fields:[{k:'engine',l:'Engine',type:'select',opts:['AWS Glue','Lambda batch','dbt Cloud','Apache Spark']},
+            {k:'jobs',l:'Jobs/day',type:'number',def:10}],
+    mc:(f)=>{
+      const perJob={'AWS Glue':0.88,'Lambda batch':0.05,'dbt Cloud':0.08,'Apache Spark':0.50}[f.engine]||0.88;
+      return f.jobs*perJob*30;
+    },
+    rc:(f)=>{
+      const perJob={'AWS Glue':0.88,'Lambda batch':0.05,'dbt Cloud':0.08,'Apache Spark':0.50}[f.engine]||0.88;
+      return f.jobs*perJob;
+    }
+  },
+
+  // Streaming Pipeline (AWS Kinesis / MSK)
+  // Kinesis: $0.015/shard/hr + $0.014/1M PUT records
+  // MSK (Kafka): $0.21/hr per broker (3 brokers min) = $453/mo
+  // eps = events/sec; 1 shard handles 1000 records/sec
+  { cat:'Pipeline', id:'pipe-stream', name:'Streaming Pipeline', sub:'Kafka / Kinesis',
+    fields:[{k:'service',l:'Service',type:'select',opts:['AWS Kinesis','Amazon MSK (Kafka)','Confluent Cloud']},
+            {k:'eps',l:'Events/sec',type:'number',def:1000}],
+    mc:(f)=>{
+      if(f.service==='AWS Kinesis'){
+        const shards=Math.ceil(f.eps/1000);
+        return shards*0.015*720+f.eps*86400*30*0.000000014;
+      }
+      if(f.service==='Amazon MSK (Kafka)') return 453.60; // 3 brokers, m5.large
+      if(f.service==='Confluent Cloud') return Math.max(f.eps*0.0004*86400*30/1e6*100,25); // ~$0.10/1M events + $25 base
+      return f.eps*0.015*720/1000; // fallback
+    },
+    rc:(f)=>0.000000014*f.eps // per record
+  },
+
+  // Fine-tuning Pipeline
+  // LoRA on A100 40GB: ~1hr per GB dataset, $3.06/hr → $3.06/GB/run
+  // OpenAI fine-tune: $25/1M training tokens (~$12.5/GB assuming 500k tok/GB)
+  { cat:'Pipeline', id:'pipe-ft', name:'Fine-tuning Pipeline', sub:'Model training / LoRA',
+    fields:[{k:'approach',l:'Approach',type:'select',opts:['LoRA / QLoRA (OSS)','OpenAI fine-tuning','Full fine-tune (OSS)']},
+            {k:'gb',l:'Dataset (GB)',type:'number',def:5},
+            {k:'freq',l:'Frequency',type:'select',opts:['One-time','Weekly','Monthly']}],
+    mc:(f)=>{
+      const freqMult={'One-time':0.1,'Weekly':4.3,'Monthly':1}[f.freq]||1;
+      const perRun={
+        'LoRA / QLoRA (OSS)': f.gb*3.06,           // A100 40GB $3.06/hr × hrs
+        'OpenAI fine-tuning': f.gb*500*0.025,        // 500k tok/GB × $25/1M
+        'Full fine-tune (OSS)': f.gb*6.12            // 2× A100 time
+      }[f.approach]||f.gb*3.06;
+      return perRun*freqMult;
+    },
+    rc:(f)=>{
+      const perRun={'LoRA / QLoRA (OSS)':f.gb*3.06,'OpenAI fine-tuning':f.gb*500*0.025,'Full fine-tune (OSS)':f.gb*6.12}[f.approach]||f.gb*3.06;
+      return perRun;
+    }
+  },
+
+  // Synthetic Data Gen
+  // GPT-4o-mini: $0.60/1M output tokens; 200 tokens/sample → $0.00012/sample
+  { cat:'Pipeline', id:'pipe-synth', name:'Synthetic Data Gen', sub:'LLM-generated datasets',
+    fields:[{k:'model',l:'Generator model',type:'select',opts:['GPT-4o-mini','GPT-4o','Claude Haiku 4','Gemini Flash']},
+            {k:'samples',l:'Samples/run',type:'number',def:1000}],
+    mc:(f)=>{
+      // 200 output tokens/sample
+      const per1MOut={'GPT-4o-mini':0.60,'GPT-4o':10.00,'Claude Haiku 4':4.00,'Gemini Flash':0.30}[f.model]||0.60;
+      return f.samples*200/1e6*per1MOut*30;
+    },
+    rc:(f)=>{
+      const per1MOut={'GPT-4o-mini':0.60,'GPT-4o':10.00,'Claude Haiku 4':4.00,'Gemini Flash':0.30}[f.model]||0.60;
+      return f.samples*200/1e6*per1MOut;
+    }
+  },
+
+  // ── Infra ─────────────────────────────────────────────────────
+  // GPU Instance (on-demand hourly, major cloud providers)
+  // T4        AWS g4dn.xlarge:    $0.526/hr
+  // A100 40GB AWS p4d / GCP:      $3.06/hr
+  // A100 80GB GCP a2-highgpu-1g:  $3.67/hr
+  // H100 80GB CoreWeave on-demand: $4.76/hr
+  { cat:'Infra', id:'inf-gpu', name:'GPU Instance', sub:'Compute for inference',
+    fields:[{k:'type',l:'GPU type',type:'select',opts:['T4 (g4dn.xlarge)','A100 40GB','A100 80GB','H100 80GB']},
+            {k:'count',l:'Count',type:'number',def:1},
+            {k:'hrs',l:'Hours/day',type:'number',def:8}],
+    mc:(f)=>{
+      const hr={'T4 (g4dn.xlarge)':0.526,'A100 40GB':3.06,'A100 80GB':3.67,'H100 80GB':4.76}[f.type]||0.526;
+      return hr*f.count*f.hrs*30;
+    },
+    rc:(f)=>{
+      const hr={'T4 (g4dn.xlarge)':0.526,'A100 40GB':3.06,'A100 80GB':3.67,'H100 80GB':4.76}[f.type]||0.526;
+      return hr*f.count/3600; // per second amortized
+    }
+  },
+
+  // CPU Instance
+  // AWS c6i (compute-optimized): $0.17/hr for 4vCPU/8GB
+  // Approx: $0.0425/vCPU/hr + $0.006/GB RAM/hr
+  { cat:'Infra', id:'inf-cpu', name:'CPU Instance', sub:'App server / worker',
+    fields:[{k:'vcpu',l:'vCPUs',type:'number',def:4},
+            {k:'ram',l:'RAM (GB)',type:'number',def:16},
+            {k:'hrs',l:'Hours/day',type:'number',def:24}],
+    mc:(f)=>(f.vcpu*0.0425+f.ram*0.006)*f.hrs*30,
+    rc:(f)=>(f.vcpu*0.0425+f.ram*0.006)/3600
+  },
+
+  // Serverless Functions (AWS Lambda)
+  // $0.20/1M requests + $0.0000166667/GB-sec
+  // Typical: 512MB, avg duration configured by user
+  { cat:'Infra', id:'inf-sl', name:'Serverless Functions', sub:'AWS Lambda / GCF',
+    fields:[{k:'inv',l:'Invocations/day (k)',type:'number',def:100},
+            {k:'ms',l:'Avg duration (ms)',type:'number',def:500}],
+    mc:(f)=>{
+      const reqCost=f.inv*30*0.20/1000; // $0.20/1M
+      const computeCost=f.inv*1000*30*(f.ms/1000)*0.512*0.0000166667; // 512MB
+      return reqCost+computeCost;
+    },
+    rc:(f)=>{
+      const reqCost=0.0000002; // $0.20/1M
+      const computeCost=(f.ms/1000)*0.512*0.0000166667;
+      return reqCost+computeCost;
+    }
+  },
+
+  // Kubernetes (AWS EKS)
+  // EKS cluster fee: $0.10/hr = $72/mo
+  // Nodes:
+  //   c5.large   2vCPU/4GB:  $0.085/hr = $61.20/mo
+  //   c5.xlarge  4vCPU/8GB:  $0.170/hr = $122.40/mo
+  //   c5.2xlarge 8vCPU/16GB: $0.340/hr = $244.80/mo
+  { cat:'Infra', id:'inf-k8s', name:'Kubernetes Cluster', sub:'AWS EKS / GKE',
+    fields:[{k:'nodes',l:'Nodes',type:'number',def:3},
+            {k:'type',l:'Node type',type:'select',opts:['c5.large (2vCPU/4GB)','c5.xlarge (4vCPU/8GB)','c5.2xlarge (8vCPU/16GB)']}],
+    mc:(f)=>{
+      const nodeHr={'c5.large (2vCPU/4GB)':0.085,'c5.xlarge (4vCPU/8GB)':0.170,'c5.2xlarge (8vCPU/16GB)':0.340}[f.type]||0.170;
+      return 72+nodeHr*f.nodes*720; // $72/mo EKS fee + nodes
+    },
+    rc:(f)=>0
+  },
+
+  // Load Balancer (AWS ALB)
+  // $0.008/hr = $5.76/mo + $0.008/LCU-hr
+  // 1 LCU ≈ 1000 req/min; rday in k = thousands/day
+  { cat:'Infra', id:'inf-lb', name:'Load Balancer', sub:'AWS ALB / GCP LB',
+    fields:[{k:'rday',l:'Requests/day (k)',type:'number',def:500}],
+    mc:(f)=>{
+      const lcuHr=f.rday*1000/60/60/1000; // rday×1000 req/day ÷ 3600sec ÷ 1000 req/sec per LCU
+      return 5.76+lcuHr*0.008*720;
+    },
+    rc:(f)=>0.000000083 // $0.008/LCU per hour, tiny per-request
+  },
+
+  // CDN (AWS CloudFront)
+  // $0.0085/GB for first 10TB/mo, $0.0075 next 40TB
+  { cat:'Infra', id:'inf-cdn', name:'CDN / Edge Cache', sub:'CloudFront, Fastly',
+    fields:[{k:'provider',l:'Provider',type:'select',opts:['AWS CloudFront','Fastly','Cloudflare']},
+            {k:'gb',l:'Bandwidth (GB/mo)',type:'number',def:100}],
+    mc:(f)=>{
+      const rate={'AWS CloudFront':0.0085,'Fastly':0.012,'Cloudflare':0.0}[f.provider]||0.0085;
+      return f.gb*rate; // Cloudflare free tier for most traffic
+    },
+    rc:(f)=>0
+  },
+
+  // Message Queue
+  // SQS Standard: $0.40/1M messages (after 1M free/mo)
+  // SQS FIFO:     $0.50/1M
+  // MSK Kafka:    $0.21/hr per broker (3 broker min) = $453/mo
+  { cat:'Infra', id:'inf-queue', name:'Message Queue', sub:'SQS, Kafka, RabbitMQ',
+    fields:[{k:'service',l:'Service',type:'select',opts:['AWS SQS Standard','AWS SQS FIFO','Amazon MSK','RabbitMQ (self-hosted)']},
+            {k:'msgs',l:'Messages/day (k)',type:'number',def:1000}],
+    mc:(f)=>{
+      if(f.service==='Amazon MSK') return 453.60;
+      if(f.service==='RabbitMQ (self-hosted)') return 30; // EC2 t3.small
+      const per1M={'AWS SQS Standard':0.40,'AWS SQS FIFO':0.50}[f.service]||0.40;
+      return Math.max(0,(f.msgs*30-1000)/1000*per1M); // first 1M free
+    },
+    rc:(f)=>{
+      if(f.service==='Amazon MSK'||f.service==='RabbitMQ (self-hosted)') return 0;
+      return f.msgs/1e6*({'AWS SQS Standard':0.40,'AWS SQS FIFO':0.50}[f.service]||0.40);
+    }
+  },
+
+  // Container Registry
+  // AWS ECR: $0.10/GB/mo storage + $0.09/GB data transfer out
+  // Docker Hub Pro: $9/mo flat
+  { cat:'Infra', id:'inf-reg', name:'Container Registry', sub:'AWS ECR, Docker Hub',
+    fields:[{k:'provider',l:'Provider',type:'select',opts:['AWS ECR','Docker Hub Pro','GitHub Container Registry']},
+            {k:'gb',l:'Images (GB)',type:'number',def:5}],
+    mc:(f)=>{
+      if(f.provider==='Docker Hub Pro') return 9;
+      if(f.provider==='GitHub Container Registry') return f.gb*0; // free for public, $4/mo Actions
+      return f.gb*0.10; // ECR
+    },
+    rc:(f)=>0
+  },
+
+  // ── Observability ─────────────────────────────────────────────
+  // Logging (Datadog)
+  // $0.10/GB ingested (on-demand) after 5GB/mo free
+  // Elastic Cloud: ~$0.08/GB
+  { cat:'Observability', id:'obs-log', name:'Logging', sub:'Datadog, CloudWatch',
+    fields:[{k:'provider',l:'Provider',type:'select',opts:['Datadog','AWS CloudWatch','Elastic Cloud']},
+            {k:'gbday',l:'Log volume (GB/day)',type:'number',def:1}],
+    mc:(f)=>{
+      const perGB={'Datadog':0.10,'AWS CloudWatch':0.05,'Elastic Cloud':0.08}[f.provider]||0.10;
+      return Math.max(0,f.gbday*30-5)*perGB; // 5GB/mo free on most plans
+    },
+    rc:(f)=>0
+  },
+
+  // Distributed Tracing (Datadog APM)
+  // Datadog APM: $31/host/mo (includes tracing)
+  // Honeycomb: $130/mo per 10B events
+  // Jaeger self-hosted: free (compute cost only)
+  { cat:'Observability', id:'obs-trace', name:'Distributed Tracing', sub:'Datadog APM, Jaeger',
+    fields:[{k:'provider',l:'Provider',type:'select',opts:['Datadog APM','Honeycomb','Jaeger (self-hosted)','Grafana Tempo']},
+            {k:'spans',l:'Spans/day (k)',type:'number',def:500}],
+    mc:(f)=>{
+      if(f.provider==='Datadog APM') return 31; // per host, billed separately
+      if(f.provider==='Honeycomb') return Math.max(130,f.spans*30/1e7*130); // $130/10B events
+      if(f.provider==='Grafana Tempo') return f.spans*30/1e6*0.35; // $0.35/1M spans
+      return 0; // self-hosted Jaeger
+    },
+    rc:(f)=>0
+  },
+
+  // Metrics / Monitoring
+  // Datadog Infrastructure: $15/host/mo
+  // Grafana Cloud Pro: $8/1000 active series/mo (over 10k free)
+  { cat:'Observability', id:'obs-metric', name:'Metrics / Monitoring', sub:'Prometheus, Grafana, Datadog',
+    fields:[{k:'provider',l:'Provider',type:'select',opts:['Grafana Cloud','Datadog Infrastructure','AWS CloudWatch','Self-hosted Prometheus']},
+            {k:'series',l:'Metric series',type:'number',def:200}],
+    mc:(f)=>{
+      if(f.provider==='Datadog Infrastructure') return 15; // per host
+      if(f.provider==='Grafana Cloud') return Math.max(0,f.series-10000)/1000*8;
+      if(f.provider==='AWS CloudWatch') return f.series*0.30; // $0.30/metric/mo
+      return 0; // self-hosted Prometheus
+    },
+    rc:(f)=>0
+  },
+
+  // LLM Eval Harness
+  // LangSmith: $39/mo (50k traces) then $0.005/100 traces
+  // Confident AI (DeepEval): $0/mo open source, $49/mo cloud
+  // Weights & Biases Weave: $0.023/1k calls
+  { cat:'Observability', id:'obs-evalharness', name:'LLM Eval Harness', sub:'LangSmith, DeepEval',
+    fields:[{k:'platform',l:'Platform',type:'select',opts:['LangSmith','W&B Weave','DeepEval Cloud','Self-hosted']},
+            {k:'eday',l:'Evals/day',type:'number',def:100},
+            {k:'type',l:'Eval type',type:'select',opts:['LLM judge','Embedding','Regex','Human']}],
+    mc:(f)=>{
+      const llmPerEval={'LLM judge':0.0125,'Embedding':0.0000102,'Regex':0,'Human':0}[f.type]||0.0125;
+      const platformCost={
+        'LangSmith': 39+Math.max(0,f.eday*30-50000)/100*0.005,
+        'W&B Weave':  f.eday*30*0.000023,
+        'DeepEval Cloud': 49,
+        'Self-hosted': 0
+      }[f.platform]||39;
+      return platformCost+f.eday*30*llmPerEval;
+    },
+    rc:(f)=>{
+      const llmPerEval={'LLM judge':0.0125,'Embedding':0.0000102,'Regex':0,'Human':0}[f.type]||0.0125;
+      return f.eday*llmPerEval;
+    }
+  },
+
+  // Prompt Logger
+  // Helicone: free <10k req, $0.0001/request over
+  // LangSmith: $39/mo base
+  // Self-hosted (PostgreSQL): ~$0
+  { cat:'Observability', id:'obs-plog', name:'Prompt Logger', sub:'Helicone, LangSmith',
+    fields:[{k:'platform',l:'Platform',type:'select',opts:['Helicone','LangSmith','Portkey','Self-hosted']},
+            {k:'rday',l:'Requests logged/day',type:'number',def:1000}],
+    mc:(f)=>{
+      const monthly=f.rday*30;
+      if(f.platform==='Helicone') return Math.max(0,monthly-10000)*0.0001;
+      if(f.platform==='LangSmith') return 39+Math.max(0,monthly-50000)/100*0.005;
+      if(f.platform==='Portkey') return Math.max(0,monthly-10000)*0.00009;
+      return 5; // self-hosted: small RDS cost
+    },
+    rc:(f)=>{
+      if(f.platform==='Helicone') return 0.0001;
+      if(f.platform==='Portkey')  return 0.00009;
+      return 0;
+    }
+  },
+
+  // Dashboard / Alerting
+  // Grafana Cloud: free up to 3 users, $8/user/mo beyond
+  // Datadog Dashboards: included in infra/APM plans ($15+/host)
+  { cat:'Observability', id:'obs-dash', name:'Dashboard / Alerting', sub:'Grafana, Datadog',
+    fields:[{k:'provider',l:'Provider',type:'select',opts:['Grafana Cloud','Datadog','AWS CloudWatch','Self-hosted Grafana']},
+            {k:'count',l:'Dashboard count',type:'number',def:3}],
+    mc:(f)=>{
+      if(f.provider==='Grafana Cloud') return Math.max(0,f.count-3)*8; // first 3 free
+      if(f.provider==='Datadog') return 15; // part of infra plan
+      if(f.provider==='AWS CloudWatch') return f.count*3; // $3/dashboard/mo
+      return 0; // self-hosted
+    },
+    rc:(f)=>0
+  },
+
+  // Cost Monitor (AWS Cost Explorer / custom)
+  // AWS Cost Explorer: $0.01 per API call, $0 for console
+  { cat:'Observability', id:'obs-costmon', name:'Cost Monitor', sub:'AWS Cost Explorer, Infracost',
+    fields:[],
+    mc:(f)=>0,
+    rc:(f)=>0
+  },
+];
+
+// State
+let nodes = {}, connections = [], selectedId = null, selectedConn = null;
+let dragging = null, dragOff = {x:0,y:0};
+let draggingWP = null; // {connIdx, wpIdx}
+let connecting = null;
+let nodeCounter = 0;
+
+// Viewport: pan + zoom
+let vpX = 40, vpY = 40, vpScale = 1;
+const MIN_SCALE = 0.15, MAX_SCALE = 2.5;
+const canvas = document.getElementById('canvas');
+
+function applyViewport() {
+  canvas.style.transform = `translate(${vpX}px,${vpY}px) scale(${vpScale})`;
+  document.getElementById('zoom-label').textContent = Math.round(vpScale*100)+'%';
+}
+applyViewport();
+
+// Pan state
+let panning = false, panStart = {x:0,y:0}, panVpStart = {x:0,y:0};
+
+// Convert screen coords → canvas coords
+function screenToCanvas(sx, sy) {
+  const wRect = document.getElementById('canvas-wrap').getBoundingClientRect();
+  return {
+    x: (sx - wRect.left - vpX) / vpScale,
+    y: (sy - wRect.top  - vpY) / vpScale
+  };
+}
+
+// Grid — draws dot-grid on the background canvas element
+function drawGrid() {
+  const cv = document.getElementById('canvas-bg');
+  const wrapEl = document.getElementById('canvas-wrap');
+  cv.width = wrapEl.clientWidth; cv.height = wrapEl.clientHeight;
+  const ctx = cv.getContext('2d');
+  const dark = window.matchMedia('(prefers-color-scheme:dark)').matches;
+  ctx.fillStyle = dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)';
+  const step = 24 * vpScale;
+  const offX = vpX % step;
+  const offY = vpY % step;
+  for (let x = offX; x < cv.width; x += step) {
+    for (let y = offY; y < cv.height; y += step) {
+      ctx.beginPath(); ctx.arc(x, y, 0.8, 0, Math.PI*2); ctx.fill();
+    }
+  }
+}
+
+// Build palette
+function buildPalette() {
+  const pal = document.getElementById('palette');
+  const cats = [...new Set(COMPONENTS.map(c=>c.cat))];
+  cats.forEach(cat => {
+    const h = document.createElement('div');
+    h.className = 'cat-header';
+    h.textContent = cat;
+    pal.appendChild(h);
+    COMPONENTS.filter(c=>c.cat===cat).forEach(comp => {
+      const el = document.createElement('div');
+      el.className = 'palette-item';
+      el.draggable = true;
+      el.innerHTML = `<div class="p-dot" style="background:${CAT_COLORS[cat]}"></div><div><div>${comp.name}</div><div class="p-sub">${comp.sub}</div></div>`;
+      el.addEventListener('dragstart', e => { e.dataTransfer.setData('compId', comp.id); });
+      pal.appendChild(el);
+    });
+  });
+}
+
+// Defaults
+function getDefaults(comp) {
+  const f = {};
+  comp.fields.forEach(fd => {
+    f[fd.k] = fd.type === 'number' ? (fd.def || 1) : fd.opts[0];
+  });
+  return f;
+}
+
+function calcMC(comp, fields) { try { const v = comp.mc(fields); return isNaN(v)||!isFinite(v) ? 0 : Math.max(0,v); } catch(e){return 0;} }
+function calcRC(comp, fields) { try { const v = comp.rc(fields); return isNaN(v)||!isFinite(v) ? 0 : Math.max(0,v); } catch(e){return 0;} }
+
+// Add node
+function addNode(compId, x, y) {
+  const comp = COMPONENTS.find(c=>c.id===compId);
+  if (!comp) return null;
+  const id = 'n'+(++nodeCounter);
+  nodes[id] = { id, compId, x, y, fields: getDefaults(comp) };
+  renderNode(id);
+  updateSidebar();
+  hideEmpty();
+  return id;
+}
+
+function hideEmpty() {
+  const e = document.getElementById('empty-state');
+  if (Object.keys(nodes).length > 0) e.style.display='none'; else e.style.display='';
+}
+
+function renderNode(id) {
+  const node = nodes[id];
+  const comp = COMPONENTS.find(c=>c.id===node.compId);
+  const col = CAT_COLORS[comp.cat];
+  let el = document.getElementById('nd-'+id);
+  if (el) el.remove();
+  el = document.createElement('div');
+  el.className = 'node' + (selectedId===id?' selected':'');
+  el.id = 'nd-'+id;
+  el.style.left = node.x+'px'; el.style.top = node.y+'px';
+  el.style.borderColor = col+'44';
+  const mc = calcMC(comp, node.fields);
+  el.innerHTML = `
+    <div class="port port-in"  id="pi-${id}" style="border-color:${col};color:${col}" data-id="${id}" data-role="in"></div>
+    <div class="node-header">
+      <div class="node-dot" style="background:${col}"></div>
+      <div class="node-title">${comp.name}</div>
+    </div>
+    <div class="node-sub">${comp.sub}</div>
+    <div class="node-cost">~$${mc.toFixed(0)}/mo</div>
+    <div class="port port-out" id="po-${id}" style="border-color:${col};color:${col}" data-id="${id}" data-role="out"></div>
+  `;
+  el.addEventListener('mousedown', e => {
+    if (e.target.classList.contains('port')) return;
+    startDrag(e, id);
+  });
+  el.querySelector('.port-out').addEventListener('mousedown', e => { e.stopPropagation(); startConnect(e, id); });
+  el.querySelector('.port-in').addEventListener('mouseup',   e => { e.stopPropagation(); endConnect(id); });
+  el.addEventListener('click', e => { e.stopPropagation(); selectNode(id); });
+  canvas.appendChild(el);
+}
+
+// Drag
+function startDrag(e, id) {
+  selectNode(id);
+  dragging = id;
+  const node = nodes[id];
+  const cp = screenToCanvas(e.clientX, e.clientY);
+  dragOff = { x: cp.x - node.x, y: cp.y - node.y };
+  e.preventDefault();
+}
+
+document.addEventListener('mousemove', e => {
+  if (draggingWP) {
+    const cp = screenToCanvas(e.clientX, e.clientY);
+    connections[draggingWP.ci].waypoints[draggingWP.wi] = {x: cp.x, y: cp.y};
+    renderConnections();
+    return;
+  }
+  if (dragging) {
+    const cp = screenToCanvas(e.clientX, e.clientY);
+    const node = nodes[dragging];
+    node.x = Math.max(0, cp.x - dragOff.x);
+    node.y = Math.max(0, cp.y - dragOff.y);
+    const el = document.getElementById('nd-'+dragging);
+    if (el) { el.style.left=node.x+'px'; el.style.top=node.y+'px'; }
+    renderConnections();
+  }
+  if (panning) {
+    vpX = panVpStart.x + (e.clientX - panStart.x);
+    vpY = panVpStart.y + (e.clientY - panStart.y);
+    applyViewport();
+    drawGrid();
+    renderConnections();
+  }
+  if (connecting) {
+    const cp = screenToCanvas(e.clientX, e.clientY);
+    const fromEl = document.getElementById('po-'+connecting);
+    if (fromEl) {
+      const fr = fromEl.getBoundingClientRect();
+      const fc = screenToCanvas(fr.left + fr.width/2, fr.top + fr.height/2);
+      let tmp = document.getElementById('tmp-conn');
+      if (!tmp) {
+        tmp = document.createElementNS('http://www.w3.org/2000/svg','path');
+        tmp.id = 'tmp-conn';
+        tmp.setAttribute('class','conn-path');
+        tmp.setAttribute('stroke-dasharray','5,3');
+        tmp.setAttribute('marker-end','url(#arr)');
+        document.getElementById('svg-layer').appendChild(tmp);
+      }
+      const cx1 = fc.x + 80, cx2 = cp.x - 80;
+      tmp.setAttribute('d',`M${fc.x},${fc.y} C${cx1},${fc.y} ${cx2},${cp.y} ${cp.x},${cp.y}`);
+    }
+  }
+});
+
+document.addEventListener('mouseup', e => {
+  if (draggingWP) { draggingWP = null; return; }
+  if (dragging) { dragging = null; updateSidebar(); }
+  if (panning)  { panning = false; document.getElementById('canvas-wrap').style.cursor='default'; }
+  if (connecting) {
+    connecting = null;
+    document.getElementById('svg-layer').classList.remove('connecting');
+    const t = document.getElementById('tmp-conn'); if(t) t.remove();
+  }
+});
+
+// Connect
+function startConnect(e, fromId) {
+  connecting = fromId;
+  document.getElementById('svg-layer').classList.add('connecting');
+  e.preventDefault();
+}
+function endConnect(toId) {
+  if (connecting && connecting !== toId) {
+    if (!connections.find(c=>c.from===connecting&&c.to===toId)) {
+      connections.push({from:connecting, to:toId, waypoints:[]});
+      renderConnections();
+    }
+  }
+  connecting = null;
+  document.getElementById('svg-layer').classList.remove('connecting');
+  const t = document.getElementById('tmp-conn'); if(t) t.remove();
+}
+
+// SVG layer mousedown: deselect on empty space, or pan
+document.getElementById('svg-layer').addEventListener('mousedown', e => {
+  if (e.target === document.getElementById('svg-layer')) {
+    // Click landed on empty SVG canvas — deselect
+    if (!spaceDown && e.button === 0) { deselect(); return; }
+  }
+  // Middle mouse or space+drag: pan
+  if (e.button === 1 || (e.button === 0 && spaceDown)) {
+    e.preventDefault();
+    panning = true;
+    panStart = {x: e.clientX, y: e.clientY};
+    panVpStart = {x: vpX, y: vpY};
+    wrapEl.style.cursor = 'grabbing';
+  }
+});
+
+// Canvas-wrap mousedown: pan triggers only (deselect handled by SVG layer above)
+const wrapEl = document.getElementById('canvas-wrap');
+wrapEl.addEventListener('mousedown', e => {
+  if (e.target !== wrapEl && e.target !== document.getElementById('canvas-bg') && e.target !== canvas) return;
+  if (e.button === 1) {
+    e.preventDefault();
+    panning = true;
+    panStart = {x: e.clientX, y: e.clientY};
+    panVpStart = {x: vpX, y: vpY};
+    wrapEl.style.cursor = 'grabbing';
+    return;
+  }
+  if (e.button === 0 && spaceDown) {
+    e.preventDefault();
+    panning = true;
+    panStart = {x: e.clientX, y: e.clientY};
+    panVpStart = {x: vpX, y: vpY};
+    wrapEl.style.cursor = 'grabbing';
+  }
+  if (e.button === 0 && !spaceDown) deselect();
+});
+
+// Space key for pan mode
+let spaceDown = false;
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) {
+    spaceDown = true;
+    document.getElementById('canvas-wrap').style.cursor = 'grab';
+    e.preventDefault();
+  }
+  if ((e.key==='Delete'||e.key==='Backspace') && !['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) {
+    if (selectedConn !== null) {
+      connections.splice(selectedConn, 1);
+      selectedConn = null;
+      renderConnections();
+    } else if (selectedId) {
+      deleteNode(selectedId);
+    }
+  }
+});
+document.addEventListener('keyup', e => {
+  if (e.code === 'Space') {
+    spaceDown = false;
+    document.getElementById('canvas-wrap').style.cursor = 'default';
+  }
+});
+
+// Scroll wheel zoom — zoom toward cursor position
+wrapEl.addEventListener('wheel', e => {
+  e.preventDefault();
+  const delta = e.deltaY < 0 ? 1.08 : 0.93;
+  const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, vpScale * delta));
+  if (newScale === vpScale) return;
+  // Zoom toward mouse position
+  const wRect = wrapEl.getBoundingClientRect();
+  const mx = e.clientX - wRect.left;
+  const my = e.clientY - wRect.top;
+  vpX = mx - (mx - vpX) * (newScale / vpScale);
+  vpY = my - (my - vpY) * (newScale / vpScale);
+  vpScale = newScale;
+  applyViewport();
+  drawGrid();
+  renderConnections();
+}, { passive: false });
+
+// Drop on canvas
+wrapEl.addEventListener('dragover', e => e.preventDefault());
+wrapEl.addEventListener('drop', e => {
+  e.preventDefault();
+  const compId = e.dataTransfer.getData('compId');
+  if (!compId) return;
+  const cp = screenToCanvas(e.clientX, e.clientY);
+  addNode(compId, Math.max(10, cp.x - 80), Math.max(10, cp.y - 30));
+});
+
+// Select / deselect
+function deselect() {
+  if (selectedId) { const o=document.getElementById('nd-'+selectedId); if(o) o.classList.remove('selected'); }
+  selectedId = null;
+  if (selectedConn !== null) { selectedConn = null; renderConnections(); }
+  renderInspector();
+}
+
+function selectConn(idx) {
+  // deselect node
+  if (selectedId) { const o=document.getElementById('nd-'+selectedId); if(o) o.classList.remove('selected'); selectedId=null; renderInspector(); }
+  selectedConn = idx;
+  renderConnections();
+}
+
+function selectNode(id) {
+  if (selectedConn !== null) { selectedConn = null; renderConnections(); }
+  if (selectedId) { const o=document.getElementById('nd-'+selectedId); if(o) o.classList.remove('selected'); }
+  selectedId = id;
+  const el = document.getElementById('nd-'+id); if(el) el.classList.add('selected');
+  renderInspector();
+}
+
+// Inspector
+function renderInspector() {
+  const empty = document.getElementById('insp-empty');
+  const content = document.getElementById('insp-content');
+  if (!selectedId || !nodes[selectedId]) {
+    empty.style.display=''; content.style.display='none'; return;
+  }
+  empty.style.display='none'; content.style.display='';
+  const node = nodes[selectedId];
+  const comp = COMPONENTS.find(c=>c.id===node.compId);
+  const col = CAT_COLORS[comp.cat];
+  let html = `<div class="insp-node-name">${comp.name}</div>`;
+  html += `<div class="insp-node-cat" style="color:${col}">${comp.cat}</div>`;
+  comp.fields.forEach(fd => {
+    html += `<div class="field-row"><label>${fd.l}</label>`;
+    if (fd.type==='number') {
+      html += `<input type="number" value="${node.fields[fd.k]}" min="0" step="1" onchange="updateField('${selectedId}','${fd.k}',this.value)">`;
+    } else {
+      html += `<select onchange="updateField('${selectedId}','${fd.k}',this.value)">`;
+      fd.opts.forEach(o => html += `<option${o===node.fields[fd.k]?' selected':''}>${o}</option>`);
+      html += '</select>';
+    }
+    html += '</div>';
+  });
+  const mc = calcMC(comp, node.fields), rc = calcRC(comp, node.fields);
+  html += `<div style="margin-top:6px;padding:8px 10px;background:var(--bg3);border-radius:6px;font-size:11px;line-height:1.8;color:var(--text2)">
+    Monthly: <b style="color:var(--text)">$${mc.toFixed(2)}</b><br>
+    Per run: <b style="color:var(--text)">$${rc.toFixed(5)}</b>
+  </div>`;
+  html += `<button class="del-btn" onclick="deleteNode('${selectedId}')"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/></svg></span> Remove</button>`;
+  content.innerHTML = html;
+}
+
+function updateField(id, key, val) {
+  if (!nodes[id]) return;
+  const comp = COMPONENTS.find(c=>c.id===nodes[id].compId);
+  const fd = comp.fields.find(f=>f.k===key);
+  nodes[id].fields[key] = fd && fd.type==='number' ? parseFloat(val)||0 : val;
+  renderNode(id);
+  renderInspector();
+  updateSidebar();
+}
+
+function deleteNode(id) {
+  connections = connections.filter(c=>c.from!==id&&c.to!==id);
+  delete nodes[id];
+  const el = document.getElementById('nd-'+id); if(el) el.remove();
+  if (selectedId===id) {
+    selectedId=null;
+    document.getElementById('insp-empty').style.display='';
+    document.getElementById('insp-content').style.display='none';
+  }
+  renderConnections();
+  updateSidebar();
+  hideEmpty();
+}
+
+// Sidebar totals
+function updateSidebar() {
+  let mc=0, rc=0;
+  Object.values(nodes).forEach(node => {
+    const comp = COMPONENTS.find(c=>c.id===node.compId);
+    mc += calcMC(comp, node.fields);
+    rc += calcRC(comp, node.fields);
+  });
+  document.getElementById('cost-month').textContent = '$'+mc.toFixed(0);
+  document.getElementById('cost-run').textContent   = '$'+rc.toFixed(4);
+  document.getElementById('cost-count').textContent = Object.keys(nodes).length;
+
+  const cl = document.getElementById('checklist');
+  const ns = Object.values(nodes);
+  if (!ns.length) { cl.innerHTML='<div style="font-size:11px;color:var(--text3)">None yet</div>'; return; }
+  cl.innerHTML = ns.map(node => {
+    const comp = COMPONENTS.find(c=>c.id===node.compId);
+    return `<div class="checklist-item"><div class="check-dot" style="background:${CAT_COLORS[comp.cat]}"></div><span>${comp.name}</span><span class="checklist-cat">${comp.cat}</span></div>`;
+  }).join('');
+}
+
+// SVG connections
+function initSVGDefs() {
+  const svg = document.getElementById('svg-layer');
+  const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+  defs.innerHTML = `<marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1.5L8 5L2 8.5" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>`;
+  svg.appendChild(defs);
+}
+
+// Build SVG path string from endpoints + waypoints
+function buildPathD(fx, fy, tx, ty, waypoints) {
+  if (!waypoints || waypoints.length === 0) {
+    // Default smooth cubic bezier
+    const cx1 = fx + Math.max(60, Math.abs(tx-fx)*0.45);
+    const cx2 = tx - Math.max(60, Math.abs(tx-fx)*0.45);
+    return `M${fx},${fy} C${cx1},${fy} ${cx2},${ty} ${tx},${ty}`;
+  }
+  // Polyline with rounded corners through waypoints
+  const pts = [{x:fx,y:fy}, ...waypoints, {x:tx,y:ty}];
+  const R = 18; // corner radius
+  let d = `M${pts[0].x},${pts[0].y}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const prev = pts[i-1], cur = pts[i], next = pts[i+1];
+    const d1 = Math.hypot(cur.x-prev.x, cur.y-prev.y);
+    const d2 = Math.hypot(next.x-cur.x, next.y-cur.y);
+    const r = Math.min(R, d1/2, d2/2);
+    const t1 = r/d1, t2 = r/d2;
+    const bx1 = cur.x - (cur.x-prev.x)*t1, by1 = cur.y - (cur.y-prev.y)*t1;
+    const bx2 = cur.x + (next.x-cur.x)*t2, by2 = cur.y + (next.y-cur.y)*t2;
+    d += ` L${bx1},${by1} Q${cur.x},${cur.y} ${bx2},${by2}`;
+  }
+  d += ` L${pts[pts.length-1].x},${pts[pts.length-1].y}`;
+  return d;
+}
+
+function renderConnections() {
+  const svg = document.getElementById('svg-layer');
+  svg.querySelectorAll('.conn-group').forEach(e=>e.remove());
+
+  connections.forEach((conn, i) => {
+    const fn = nodes[conn.from], tn = nodes[conn.to];
+    if (!fn || !tn) return;
+    const fEl = document.getElementById('nd-'+conn.from);
+    const tEl = document.getElementById('nd-'+conn.to);
+    if (!fEl || !tEl) return;
+
+    const fx = fn.x + fEl.offsetWidth;  const fy = fn.y + fEl.offsetHeight/2;
+    const tx = tn.x;                     const ty = tn.y + tEl.offsetHeight/2;
+    const wps = conn.waypoints || [];
+    const isSelected = selectedConn === i;
+    const pathD = buildPathD(fx, fy, tx, ty, wps);
+
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.className.baseVal = 'conn-group';
+    g.setAttribute('pointer-events','all');
+
+    // Wide invisible hit-target for easy clicking
+    const hit = document.createElementNS('http://www.w3.org/2000/svg','path');
+    hit.setAttribute('d', pathD);
+    hit.setAttribute('fill','none');
+    hit.setAttribute('stroke','rgba(0,0,0,0.001)');
+    hit.setAttribute('stroke-width','18');
+    hit.setAttribute('pointer-events','stroke');
+    hit.style.cursor = 'pointer';
+    hit.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      if (e.button === 2) return; // handled by contextmenu
+      selectConn(i);
+    });
+    // Right-click on path to add waypoint
+    hit.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const cp = screenToCanvas(e.clientX, e.clientY);
+      if (!conn.waypoints) conn.waypoints = [];
+      // Insert waypoint at closest segment position
+      const allPts = [{x:fx,y:fy}, ...conn.waypoints, {x:tx,y:ty}];
+      let bestIdx = 1, bestDist = Infinity;
+      for (let k = 0; k < allPts.length-1; k++) {
+        const mx = (allPts[k].x+allPts[k+1].x)/2, my = (allPts[k].y+allPts[k+1].y)/2;
+        const d = Math.hypot(cp.x-mx, cp.y-my);
+        if (d < bestDist) { bestDist=d; bestIdx=k+1; }
+      }
+      conn.waypoints.splice(bestIdx-1, 0, {x:cp.x, y:cp.y});
+      selectConn(i);
+      renderConnections();
+    });
+    g.appendChild(hit);
+
+    // Visible path
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d', pathD);
+    path.setAttribute('fill','none');
+    path.setAttribute('stroke', isSelected ? '#378ADD' : 'var(--border2, #aaa)');
+    path.setAttribute('stroke-width', isSelected ? '2' : '1.5');
+    path.setAttribute('marker-end','url(#arr)');
+    path.setAttribute('pointer-events','none');
+    g.appendChild(path);
+
+    // If selected: show waypoint handles + midpoint add-hint
+    if (isSelected) {
+      // Existing waypoint handles
+      wps.forEach((wp, wi) => {
+        const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        circle.setAttribute('cx', wp.x); circle.setAttribute('cy', wp.y); circle.setAttribute('r', '6');
+        circle.setAttribute('fill','#378ADD'); circle.setAttribute('stroke','#fff'); circle.setAttribute('stroke-width','2');
+        circle.setAttribute('pointer-events','all');
+        circle.style.cursor = 'move';
+        circle.addEventListener('mousedown', e => {
+          e.stopPropagation();
+          draggingWP = {ci: i, wi};
+          e.preventDefault();
+        });
+        // Double-click waypoint to remove it
+        circle.addEventListener('dblclick', e => {
+          e.stopPropagation();
+          conn.waypoints.splice(wi, 1);
+          renderConnections();
+        });
+        g.appendChild(circle);
+      });
+
+      // Mid-segment "+" hints to add new waypoints
+      const allPts = [{x:fx,y:fy}, ...wps, {x:tx,y:ty}];
+      for (let k = 0; k < allPts.length-1; k++) {
+        const mx = (allPts[k].x+allPts[k+1].x)/2;
+        const my = (allPts[k].y+allPts[k+1].y)/2;
+        const addBtn = document.createElementNS('http://www.w3.org/2000/svg','g');
+        addBtn.style.cursor = 'crosshair';
+        const addCircle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        addCircle.setAttribute('cx', mx); addCircle.setAttribute('cy', my); addCircle.setAttribute('r','5');
+        addCircle.setAttribute('fill','#fff'); addCircle.setAttribute('stroke','#378ADD'); addCircle.setAttribute('stroke-width','1.5');
+        addCircle.setAttribute('pointer-events','all');
+        const addText = document.createElementNS('http://www.w3.org/2000/svg','text');
+        addText.setAttribute('x', mx); addText.setAttribute('y', my);
+        addText.setAttribute('text-anchor','middle'); addText.setAttribute('dominant-baseline','central');
+        addText.setAttribute('font-size','9'); addText.setAttribute('fill','#378ADD');
+        addText.setAttribute('pointer-events','none');
+        addText.textContent = '+';
+        addBtn.appendChild(addCircle); addBtn.appendChild(addText);
+        addBtn.addEventListener('mousedown', e => {
+          e.stopPropagation();
+          conn.waypoints.splice(k, 0, {x:mx, y:my});
+          draggingWP = {ci:i, wi:k};
+          renderConnections();
+          e.preventDefault();
+        });
+        g.appendChild(addBtn);
+      }
+
+      // Delete hint label at midpoint of whole path
+      const midPt = allPts[Math.floor(allPts.length/2)];
+      const badge = document.createElementNS('http://www.w3.org/2000/svg','g');
+      const bx = midPt.x, by = midPt.y - 18;
+      const brect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+      brect.setAttribute('x',bx-38); brect.setAttribute('y',by-9);
+      brect.setAttribute('width','76'); brect.setAttribute('height','16');
+      brect.setAttribute('rx','4'); brect.setAttribute('fill','#378ADD');
+      const btxt = document.createElementNS('http://www.w3.org/2000/svg','text');
+      btxt.setAttribute('x',bx); btxt.setAttribute('y',by);
+      btxt.setAttribute('text-anchor','middle'); btxt.setAttribute('dominant-baseline','central');
+      btxt.setAttribute('font-size','9'); btxt.setAttribute('fill','#fff');
+      btxt.setAttribute('pointer-events','none');
+      btxt.textContent = 'Del to remove · right-click to route';
+      badge.appendChild(brect); badge.appendChild(btxt);
+      badge.style.pointerEvents = 'none';
+      g.appendChild(badge);
+    }
+
+    svg.appendChild(g);
+  });
+}
+
+// Clear
+function clearCanvas() {
+  nodes={}; connections=[]; selectedId=null; selectedConn=null; nodeCounter=0;
+  canvas.querySelectorAll('.node').forEach(n=>n.remove());
+  document.getElementById('svg-layer').querySelectorAll('.conn-group').forEach(e=>e.remove());
+  document.getElementById('insp-empty').style.display='';
+  document.getElementById('insp-content').style.display='none';
+  updateSidebar(); hideEmpty();
+}
+
+// Templates
+// Helper: set a field value on a node after creation
+function setField(id, key, val) {
+  if (!nodes[id]) return;
+  nodes[id].fields[key] = val;
+}
+
+function conn(from, to) { return {from, to, waypoints:[]}; }
+
+function loadTemplate(type) {
+  if (!type) return;
+  clearCanvas();
+  const N = (compId, x, y) => addNode(compId, x, y);
+
+  // ─────────────────────────────────────────────
+  // 1. PRODUCTION RAG PIPELINE
+  // ─────────────────────────────────────────────
+  if (type === 'rag') {
+    // Indexing lane
+    const ing = N('pipe-ingest',  40,  60); setField(ing,'src','Files'); setField(ing,'gbday',5);
+    const chk = N('pipe-chunk',  230,  60); setField(chk,'strat','Recursive'); setField(chk,'size',512);
+    const emb = N('pipe-embed',  420,  60); setField(emb,'batch',128);
+    const qemb= N('llm-emb',    620,  60); setField(qemb,'model','text-embedding-3-small'); setField(qemb,'qday',200);
+    const vdb = N('mem-vdb',     820,  60); setField(vdb,'vecs',5000); setField(vdb,'qday',200);
+
+    // Query lane
+    const lb  = N('inf-lb',      40, 240); setField(lb,'rday',200);
+    const cac = N('mem-cache',   230, 240); setField(cac,'gb',8); setField(cac,'ttl',24);
+    const rer = N('llm-rerank',  420, 240); setField(rer,'qday',200);
+    const llm = N('llm-prop',    620, 240); setField(llm,'provider','OpenAI'); setField(llm,'tier','Medium'); setField(llm,'tokensday',300);
+
+    // Observability
+    const plog= N('obs-plog',    230, 420); setField(plog,'rday',10000);
+    const evh = N('obs-evalharness',420,420); setField(evh,'eday',500); setField(evh,'type','LLM judge');
+    const mtr = N('obs-metric',  620, 420); setField(mtr,'series',50);
+    const sl  = N('inf-sl',      820, 240); setField(sl,'inv',500); setField(sl,'ms',200);
+
+    connections = [
+      // Indexing: ingest → chunk → embed-pipeline → emb-model → vdb
+      conn(ing,chk), conn(chk,emb), conn(emb,qemb), conn(qemb,vdb),
+      // Query: lb → cache → emb-model (query embed) → reranker ← vdb → llm
+      conn(lb,cac), conn(cac,qemb), conn(vdb,rer), conn(qemb,rer), conn(rer,llm),
+      // LLM caches response
+      conn(llm,cac),
+      // Observability
+      conn(llm,plog), conn(plog,evh), conn(evh,mtr),
+      // Serverless handles embed jobs
+      conn(sl,emb),
+    ];
+
+  // ─────────────────────────────────────────────
+  // 2. AUTONOMOUS TRADING AGENT
+  // ─────────────────────────────────────────────
+  } else if (type === 'trading') {
+    const mkt = N('pipe-stream',   40,  80); setField(mkt,'eps',5000);
+    const que = N('inf-queue',    230,  80); setField(que,'msgs',500000);
+    const etl = N('pipe-etl',     420,  80); setField(etl,'jobs',288);
+    const vdb = N('mem-vdb',      620,  80); setField(vdb,'vecs',1000); setField(vdb,'qday',5000);
+    const kv  = N('mem-kv',       820,  80); setField(kv,'gb',2); setField(kv,'ops',50000);
+    const emb = N('llm-emb',      820, 260); setField(emb,'model','text-embedding-3-small'); setField(emb,'qday',500);
+
+    const reg = N('inf-reg',       40, 260); setField(reg,'gb',5);
+    const cpu = N('inf-cpu',      230, 260); setField(cpu,'vcpu',4); setField(cpu,'ram',16); setField(cpu,'hrs',24);
+    const gpu = N('inf-gpu',      420, 260); setField(gpu,'type','A100 40GB'); setField(gpu,'count',2); setField(gpu,'hrs',24);
+    const llm = N('llm-oss',      620, 260); setField(llm,'size','70B'); setField(llm,'quant','INT8'); setField(llm,'replicas',2);
+
+    const rt  = N('ag-router',     40, 440); setField(rt,'agents',3); setField(rt,'cday',5000);
+    const pln = N('ag-plan',      230, 440); setField(pln,'llm','Llama 70B'); setField(pln,'cday',5000);
+    const exe = N('ag-exec',      420, 440); setField(exe,'tools',8); setField(exe,'cday',5000);
+    const evl = N('ag-eval',      620, 440); setField(evl,'method','Rule-based'); setField(evl,'cday',5000);
+    const hum = N('ag-human',     820, 440); setField(hum,'freq','On failure');
+
+    const log = N('obs-logger',    40, 620); setField(log,'gbday',10);
+    const trc = N('obs-tracer',   230, 620); setField(trc,'spans',100000);
+    const plog= N('obs-plog',     420, 620); setField(plog,'rday',5000);
+
+    connections = [
+      // Data pipeline
+      conn(mkt,que), conn(que,etl), conn(etl,vdb),
+      conn(emb,vdb), // write feature embeddings
+      // Infra: registry → cpu → gpu → llm
+      conn(reg,cpu), conn(cpu,gpu), conn(gpu,llm),
+      // LLM powers agents
+      conn(llm,rt), conn(rt,pln), conn(pln,exe),
+      // Context: vdb and kv feed planner
+      conn(vdb,pln), conn(kv,pln),
+      // Execution flow
+      conn(exe,evl), conn(evl,hum),
+      conn(exe,kv),  // update positions
+      // Observability
+      conn(llm,plog), conn(plog,log), conn(exe,trc),
+    ];
+
+  // ─────────────────────────────────────────────
+  // 3. FULL OPEN SOURCE STACK
+  // ─────────────────────────────────────────────
+  } else if (type === 'opensource') {
+    const ing = N('pipe-ingest',   40,  60); setField(ing,'src','Files'); setField(ing,'gbday',10);
+    const chk = N('pipe-chunk',   230,  60); setField(chk,'strat','Recursive');
+    const emb = N('pipe-embed',   420,  60); setField(emb,'batch',64);
+    const qemb= N('llm-emb',      620,  60); setField(qemb,'model','BGE-M3'); setField(qemb,'qday',500);
+    const vdb = N('mem-vdb',      820,  60); setField(vdb,'provider','Qdrant'); setField(vdb,'vecs',10000);
+
+    const reg = N('inf-reg',       40, 260); setField(reg,'gb',20);
+    const k8s = N('inf-k8s',      230, 260); setField(k8s,'nodes',6); setField(k8s,'type','c5.2xlarge (8vCPU/16GB)');
+    const gpu = N('inf-gpu',      420, 260); setField(gpu,'type','A100 80GB'); setField(gpu,'count',4); setField(gpu,'hrs',24);
+    const llm = N('llm-oss',      620, 260); setField(llm,'size','70B'); setField(llm,'quant','INT8'); setField(llm,'replicas',2);
+    const cac = N('mem-cache',    820, 260); setField(cac,'gb',16); setField(cac,'ttl',12);
+
+    const sql = N('mem-sql',      420, 440); setField(sql,'gb',100); setField(sql,'instance','db.m7g.2xlarge (8vCPU/32GB)');
+    const que = N('inf-queue',    230, 440); setField(que,'msgs',100000);
+    const mtr = N('obs-metric',   620, 440); setField(mtr,'series',500);
+    const dsh = N('obs-dash',     820, 440); setField(dsh,'count',5);
+    const trc = N('obs-tracer',    40, 440); setField(trc,'spans',50000);
+    const plog= N('obs-plog',      40, 620); setField(plog,'rday',20000);
+
+    connections = [
+      // Indexing pipeline
+      conn(ing,chk), conn(chk,emb), conn(emb,qemb), conn(qemb,vdb),
+      // Infra: registry → k8s → gpu → llm
+      conn(reg,k8s), conn(k8s,gpu), conn(gpu,llm),
+      // Query path: vdb → cache → llm
+      conn(vdb,cac), conn(cac,llm),
+      // Cache needs embedding model for semantic matching
+      conn(qemb,cac),
+      conn(sql,llm),
+      // Observability
+      conn(llm,plog), conn(plog,mtr), conn(mtr,dsh),
+      conn(que,mtr), conn(k8s,que), conn(trc,dsh),
+    ];
+
+  // ─────────────────────────────────────────────
+  // 4. HIGH-END ENTERPRISE (GPT-4o)
+  // ─────────────────────────────────────────────
+  } else if (type === 'enterprise') {
+    const lb  = N('inf-lb',        40, 200); setField(lb,'rday',5000);
+    const cdn = N('inf-cdn',        40, 360); setField(cdn,'gb',500);
+    const rt  = N('ag-router',     230, 280); setField(rt,'agents',4); setField(rt,'cday',50000);
+
+    const llmL= N('llm-prop',      430,  80); setField(llmL,'provider','OpenAI'); setField(llmL,'tier','Large'); setField(llmL,'tokensday',2000);
+    const llmS= N('llm-prop',      430, 240); setField(llmS,'provider','OpenAI'); setField(llmS,'tier','Medium'); setField(llmS,'tokensday',10000);
+    const emb = N('llm-emb',       430, 400); setField(emb,'model','text-embedding-3-large'); setField(emb,'qday',500);
+
+    const reg = N('inf-reg',       630, 400); setField(reg,'gb',10);
+    const k8s = N('inf-k8s',       630, 240); setField(k8s,'nodes',12); setField(k8s,'type','c5.2xlarge (8vCPU/16GB)');
+    const vdb = N('mem-vdb',       630,  80); setField(vdb,'provider','Pinecone'); setField(vdb,'vecs',50000); setField(vdb,'qday',500);
+    const cac = N('mem-cache',     830, 240); setField(cac,'gb',32); setField(cac,'ttl',6);
+    const sql = N('mem-sql',       830,  80); setField(sql,'gb',500); setField(sql,'instance','db.m7g.2xlarge (8vCPU/32GB)');
+
+    const que = N('inf-queue',      830, 400); setField(que,'msgs',1000000);
+    const sl  = N('inf-sl',        1030, 240); setField(sl,'inv',10000); setField(sl,'ms',100);
+
+    const plog= N('obs-plog',      1030,  80); setField(plog,'rday',100000);
+    const evh = N('obs-evalharness',1030,400); setField(evh,'eday',2000); setField(evh,'type','LLM judge');
+    const cmon= N('obs-costmon',   1230, 240);
+    const dsh = N('obs-dash',      1230,  80); setField(dsh,'count',10);
+
+    connections = [
+      // Entry
+      conn(lb,rt), conn(cdn,rt),
+      // Router dispatches to LLMs
+      conn(rt,llmL), conn(rt,llmS),
+      // Embedding: emb model → vdb
+      conn(emb,vdb), conn(sl,emb),
+      // Retrieval feeds LLMs
+      conn(vdb,llmL), conn(vdb,llmS),
+      // Cache: emb → cache, cache ↔ llmS
+      conn(emb,cac), conn(cac,llmS), conn(llmS,cac),
+      // K8s infra
+      conn(reg,k8s), conn(k8s,llmL), conn(k8s,llmS),
+      conn(que,rt), conn(sql,llmL),
+      // Observability
+      conn(llmL,plog), conn(llmS,plog),
+      conn(plog,evh), conn(evh,dsh),
+      conn(cmon,dsh), conn(que,cmon),
+    ];
+
+  // ─────────────────────────────────────────────
+  // 5. CUSTOMER SUPPORT BOT
+  // ─────────────────────────────────────────────
+  } else if (type === 'support') {
+    const lb  = N('inf-lb',         40, 200); setField(lb,'rday',1000);
+    const cac = N('mem-cache',      230,  80); setField(cac,'gb',4); setField(cac,'ttl',1);
+    const ctx = N('mem-contextwindow',230,280); setField(ctx,'tokens',32);
+    const rt  = N('ag-router',      430, 160); setField(rt,'agents',3); setField(rt,'cday',10000);
+
+    const emb = N('llm-emb',        430, 360); setField(emb,'model','text-embedding-3-small'); setField(emb,'qday',200);
+    const faq = N('mem-vdb',        630,  60); setField(faq,'provider','Qdrant'); setField(faq,'vecs',2000); setField(faq,'qday',100);
+    const llm = N('llm-prop',       630, 200); setField(llm,'provider','Anthropic'); setField(llm,'tier','Medium'); setField(llm,'tokensday',500);
+    const hum = N('ag-human',       630, 360); setField(hum,'freq','On failure');
+
+    const sql = N('mem-sql',        830, 200); setField(sql,'gb',20); setField(sql,'instance','db.m7g.large (2vCPU/8GB)');
+    const plog= N('obs-plog',       830,  60); setField(plog,'rday',10000);
+    const evh = N('obs-evalharness',830,360); setField(evh,'eday',200); setField(evh,'type','Embedding');
+    const sl  = N('inf-sl',         430, 360); setField(sl,'inv',200); setField(sl,'ms',300);
+
+    connections = [
+      // Entry → router
+      conn(lb,rt),
+      // Session memory
+      conn(lb,cac), conn(cac,ctx), conn(ctx,llm),
+      // Embedding model feeds cache + vdb
+      conn(emb,cac), conn(emb,faq),
+      // Router paths
+      conn(rt,faq), conn(faq,llm),
+      conn(rt,llm), conn(rt,hum),
+      // Output
+      conn(llm,sql),
+      conn(llm,plog), conn(plog,evh),
+      conn(sl,rt),
+    ];
+
+  // ─────────────────────────────────────────────
+  // 6. CODE REVIEW AGENT
+  // ─────────────────────────────────────────────
+  } else if (type === 'codereview') {
+    const que = N('inf-queue',       40, 160); setField(que,'msgs',1000);
+    const ing = N('pipe-ingest',    230, 160); setField(ing,'src','API'); setField(ing,'gbday',0.5);
+    const etl = N('pipe-etl',       420, 160); setField(etl,'jobs',100);
+    const emb = N('llm-emb',        620, 160); setField(emb,'model','text-embedding-3-small'); setField(emb,'qday',100);
+    const vdb = N('mem-vdb',        820, 160); setField(vdb,'provider','pgvector'); setField(vdb,'vecs',500); setField(vdb,'qday',100);
+
+    const cpu = N('inf-cpu',         40, 360); setField(cpu,'vcpu',8); setField(cpu,'ram',32); setField(cpu,'hrs',8);
+    const cdr = N('ag-coder',       230, 360); setField(cdr,'lang','Python'); setField(cdr,'sandbox','E2B');
+    const llm = N('llm-prop',       420, 360); setField(llm,'provider','Anthropic'); setField(llm,'tier','Large'); setField(llm,'tokensday',100);
+    const evl = N('ag-eval',        620, 360); setField(evl,'method','LLM-as-judge'); setField(evl,'cday',100);
+    const hum = N('ag-human',       820, 360); setField(hum,'freq','Sampled 10%');
+
+    const plog= N('obs-plog',       420, 520); setField(plog,'rday',1000);
+    const trc = N('obs-tracer',     620, 520); setField(trc,'spans',5000);
+
+    connections = [
+      // Ingestion pipeline
+      conn(que,ing), conn(ing,etl),
+      // etl → embed → vdb (codebase context as vectors)
+      conn(etl,emb), conn(emb,vdb),
+      // Code agent gets compute + codebase context
+      conn(cpu,cdr), conn(vdb,cdr),
+      // LLM review flow
+      conn(cdr,llm), conn(vdb,llm),
+      conn(llm,evl), conn(evl,hum),
+      // Observability
+      conn(llm,plog), conn(plog,trc),
+    ];
+
+  // ─────────────────────────────────────────────
+  // 7. DOCUMENT INTELLIGENCE PIPELINE
+  // ─────────────────────────────────────────────
+  } else if (type === 'docintel') {
+    const sl  = N('inf-sl',          40, 160); setField(sl,'inv',1000); setField(sl,'ms',5000);
+    const que = N('inf-queue',       230, 160); setField(que,'msgs',10000);
+    const ing = N('pipe-ingest',     420, 160); setField(ing,'src','Files'); setField(ing,'gbday',20);
+    const blob= N('mem-blob',        620, 160); setField(blob,'gb',500); setField(blob,'egress',50);
+
+    const etl = N('pipe-etl',        230, 340); setField(etl,'jobs',500);
+    const mm  = N('llm-mm',          420, 340); setField(mm,'mod','Vision'); setField(mm,'rday',500);
+    const chk = N('pipe-chunk',      620, 340); setField(chk,'strat','Semantic'); setField(chk,'size',256);
+    const emb = N('llm-emb',         820, 160); setField(emb,'model','text-embedding-3-large'); setField(emb,'qday',300);
+    const vdb = N('mem-vdb',         820, 340); setField(vdb,'vecs',20000); setField(vdb,'qday',300);
+
+    const llm = N('llm-prop',        420, 520); setField(llm,'provider','OpenAI'); setField(llm,'tier','Large'); setField(llm,'tokensday',200);
+    const sql = N('mem-sql',         620, 520); setField(sql,'gb',200); setField(sql,'instance','db.m7g.xlarge (4vCPU/16GB)');
+
+    const plog= N('obs-plog',        230, 520); setField(plog,'rday',5000);
+    const mtr = N('obs-metric',       40, 520); setField(mtr,'series',100);
+
+    connections = [
+      // Trigger pipeline
+      conn(sl,que), conn(que,ing),
+      // Ingest → raw store + ETL
+      conn(ing,blob), conn(ing,etl),
+      // ETL → chunker + multimodal
+      conn(etl,chk), conn(etl,mm),
+      // Chunker → embed model → vdb
+      conn(chk,emb), conn(emb,vdb),
+      // Multimodal + vdb → LLM extraction
+      conn(mm,llm), conn(vdb,llm),
+      // Output
+      conn(llm,sql),
+      conn(llm,plog), conn(plog,mtr),
+    ];
+
+  // ─────────────────────────────────────────────
+  // 8. MULTI-AGENT RESEARCH SYSTEM
+  // ─────────────────────────────────────────────
+  } else if (type === 'research') {
+    const lb  = N('inf-lb',          40, 280); setField(lb,'rday',100);
+    const orch= N('ag-router',       230, 280); setField(orch,'agents',5); setField(orch,'cday',500);
+    const llm = N('llm-prop',        430, 120); setField(llm,'provider','OpenAI'); setField(llm,'tier','Large'); setField(llm,'tokensday',500);
+    const pln = N('ag-plan',         430, 280); setField(pln,'llm','GPT-4o'); setField(pln,'cday',500);
+
+    const emb = N('llm-emb',         630,  60); setField(emb,'model','text-embedding-3-small'); setField(emb,'qday',300);
+    const vdb = N('mem-vdb',         830, 160); setField(vdb,'vecs',5000); setField(vdb,'qday',200);
+    const ctx = N('mem-contextwindow',830,340); setField(ctx,'tokens',128);
+
+    const res1= N('ag-research',     630, 200); setField(res1,'calls',15); setField(res1,'rday',100);
+    const res2= N('ag-research',     630, 360); setField(res2,'calls',15); setField(res2,'rday',100);
+    const sl  = N('inf-sl',          430, 460); setField(sl,'inv',100); setField(sl,'ms',3000);
+    const cod = N('ag-coder',        630, 500); setField(cod,'lang','Python'); setField(cod,'sandbox','Modal');
+
+    const evl = N('ag-eval',         430, 620); setField(evl,'method','LLM-as-judge'); setField(evl,'cday',200);
+    const hum = N('ag-human',        630, 680); setField(hum,'freq','Every run');
+
+    const plog= N('obs-plog',       1030, 160); setField(plog,'rday',2000);
+    const trc = N('obs-tracer',     1030, 340); setField(trc,'spans',20000);
+    const evh = N('obs-evalharness',1030,520); setField(evh,'eday',100); setField(evh,'type','Human');
+
+    connections = [
+      // Entry
+      conn(lb,orch), conn(orch,pln),
+      // LLM powers all agents
+      conn(llm,pln), conn(llm,orch),
+      // Planner dispatches
+      conn(pln,res1), conn(pln,res2), conn(pln,cod),
+      // Embedding + shared KB
+      conn(emb,vdb),
+      conn(res1,vdb), conn(res2,vdb),  // agents write findings
+      conn(vdb,res1), conn(vdb,res2),  // agents read findings
+      conn(vdb,llm), conn(ctx,llm),
+      // Code sandbox
+      conn(sl,cod), conn(cod,llm),
+      // Eval chain
+      conn(llm,evl), conn(evl,hum),
+      // Observability
+      conn(llm,plog), conn(plog,trc), conn(trc,evh),
+    ];
+  }
+
+  setTimeout(renderConnections, 60);
+}
+
+// Export
+function exportSpec() {
+  const ns = Object.values(nodes);
+  let txt = 'AI INFRA SIMULATOR — ARCHITECTURE SPEC\n' + '='.repeat(42) + '\n\n';
+  txt += `COMPONENTS  (${ns.length} total)\n` + '-'.repeat(30) + '\n';
+  ns.forEach(node => {
+    const comp = COMPONENTS.find(c=>c.id===node.compId);
+    txt += `\n[${comp.cat}]  ${comp.name}\n`;
+    comp.fields.forEach(fd => txt += `  ${fd.l}: ${node.fields[fd.k]}\n`);
+    txt += `  Monthly cost: $${calcMC(comp,node.fields).toFixed(2)}\n`;
+    txt += `  Per-run cost: $${calcRC(comp,node.fields).toFixed(5)}\n`;
+  });
+  let mc=0, rc=0;
+  ns.forEach(node => { const comp=COMPONENTS.find(c=>c.id===node.compId); mc+=calcMC(comp,node.fields); rc+=calcRC(comp,node.fields); });
+  txt += '\n' + '='.repeat(42) + '\n';
+  txt += `TOTAL MONTHLY : $${mc.toFixed(2)}\n`;
+  txt += `TOTAL PER RUN : $${rc.toFixed(5)}\n`;
+  txt += '\nCONNECTIONS\n' + '-'.repeat(30) + '\n';
+  connections.forEach(c => {
+    const fn = nodes[c.from]?COMPONENTS.find(x=>x.id===nodes[c.from].compId).name:c.from;
+    const tn = nodes[c.to  ]?COMPONENTS.find(x=>x.id===nodes[c.to  ].compId).name:c.to;
+    txt += `  ${fn}  →  ${tn}\n`;
+  });
+  const b = new Blob([txt],{type:'text/plain'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download='infra-spec.txt'; a.click();
+}
+
+// ─────────────────────────────────────────────────────────────
+// VALIDATION ENGINE
+// ─────────────────────────────────────────────────────────────
+
+// ── Graph helpers ─────────────────────────────────────────────
+
+function getNodeIds()        { return new Set(Object.values(nodes).map(n=>n.compId)); }
+function hasAny(...ids)      { const p=getNodeIds(); return ids.some(id=>p.has(id)); }
+function countCat(cat)       { return Object.values(nodes).filter(n=>{ const c=COMPONENTS.find(x=>x.id===n.compId); return c&&c.cat===cat; }).length; }
+function countByIds(...ids)  { const p=getNodeIds(); return ids.filter(id=>p.has(id)).length; }
+function instancesOf(...ids) { return Object.values(nodes).filter(n=>ids.includes(n.compId)).map(n=>n.id); }
+
+// directed A→B
+function flowsTo(fromIds,toIds) {
+  const F=new Set(instancesOf(...[].concat(fromIds)));
+  const T=new Set(instancesOf(...[].concat(toIds)));
+  return connections.some(c=>F.has(c.from)&&T.has(c.to));
+}
+// either direction
+function linked(a,b) { return flowsTo(a,b)||flowsTo(b,a); }
+// has any incoming arrow
+function hasIncoming(...ids) {
+  const I=new Set(instancesOf(...ids));
+  return [...I].some(id=>connections.some(c=>c.to===id));
+}
+// has any outgoing arrow
+function hasOutgoing(...ids) {
+  const I=new Set(instancesOf(...ids));
+  return [...I].some(id=>connections.some(c=>c.from===id));
+}
+// on canvas but zero connections
+function isIsolated(...ids) {
+  const I=new Set(instancesOf(...ids));
+  if(!I.size) return false;
+  return ![...I].some(id=>connections.some(c=>c.from===id||c.to===id));
+}
+// human name
+function cname(id) { const c=COMPONENTS.find(x=>x.id===id); return c?c.name:id; }
+function cnames(...ids) { return [].concat(ids).map(cname).join(' / '); }
+
+// ── Rule builders ─────────────────────────────────────────────
+
+// Both nodes present but A→B arrow missing. Detects backwards too.
+function needsFlow(fromIds,toIds,level,title,desc) {
+  const fa=[].concat(fromIds), ta=[].concat(toIds);
+  if(!hasAny(...fa)||!hasAny(...ta)) return null;
+  if(flowsTo(fa,ta)) return null;
+  const bk=flowsTo(ta,fa);
+  const arrow=cnames(...fa)+' → '+cnames(...ta);
+  return {
+    level,
+    title: bk ? '⟵ Wrong direction: '+title : title,
+    desc:  bk ? 'Connection is reversed ('+cnames(...ta)+' → '+cnames(...fa)+'). '+desc : desc,
+    fix:   'Draw arrow: '+arrow,
+    arrow
+  };
+}
+
+// Node exists but required input source not feeding into it
+function needsInput(nodeIds,srcIds,level,title,desc) {
+  const na=[].concat(nodeIds), sa=[].concat(srcIds);
+  if(!hasAny(...na)||!hasAny(...sa)) return null;
+  if(flowsTo(sa,na)) return null;
+  const bk=flowsTo(na,sa);
+  const arrow=cnames(...sa)+' → '+cnames(...na);
+  return {
+    level,
+    title: bk ? '⟵ Wrong direction: '+title : title,
+    desc:  bk ? 'Arrow is reversed ('+cnames(...na)+' → '+cnames(...sa)+'). '+desc : desc,
+    fix:   'Draw arrow: '+arrow,
+    arrow
+  };
+}
+
+// Node exists but required downstream target not receiving output
+function needsOutput(nodeIds,dstIds,level,title,desc) {
+  const na=[].concat(nodeIds), da=[].concat(dstIds);
+  if(!hasAny(...na)||!hasAny(...da)) return null;
+  if(flowsTo(na,da)) return null;
+  const bk=flowsTo(da,na);
+  const arrow=cnames(...na)+' → '+cnames(...da);
+  return {
+    level,
+    title: bk ? '⟵ Wrong direction: '+title : title,
+    desc:  bk ? 'Arrow is reversed ('+cnames(...da)+' → '+cnames(...na)+'). '+desc : desc,
+    fix:   'Draw arrow: '+arrow,
+    arrow
+  };
+}
+
+// Missing node shorthand
+function missing(cond,compIds,level,title,desc,fix) {
+  if(!cond) return null;
+  return {level,title,desc,fix,arrow:null};
+}
+
+// ── Rules ─────────────────────────────────────────────────────
+// Pattern per dependency:
+//   1. presence check  → "add node X"
+//   2. direction check → "draw arrow A → B"
+// Both checks run independently so both messages can appear at once.
+const VALIDATION_RULES = [
+
+  // ══════════════════════════════════════════════
+  // OPEN SOURCE LLM
+  // ══════════════════════════════════════════════
+
+  // 1. GPU presence
+  ()=>missing(hasAny('llm-oss')&&!hasAny('inf-gpu'),[],'error',
+    'GPU Instance required for Open Source LLM',
+    'Self-hosted models (Llama, Mistral, Qwen) cannot run without a GPU. Even quantized 7B models need one for acceptable inference latency.',
+    'Add a GPU Instance node — T4 minimum for 7B INT4, A100 for 70B INT8.'),
+
+  // 2. GPU → OSS LLM direction
+  ()=>needsInput('llm-oss','inf-gpu','error',
+    'GPU Instance must connect INTO Open Source LLM',
+    'The GPU Instance powers the model inference server. Output port of GPU Instance → Input port of Open Source LLM.'),
+
+  // 3. Serving infra presence (K8s or CPU)
+  ()=>missing(hasAny('llm-oss')&&!hasAny('inf-k8s','inf-cpu'),[],'warning',
+    'No serving infrastructure for Open Source LLM',
+    'An OSS LLM needs a CPU Instance or Kubernetes Cluster to run the inference server (vLLM, TGI, Ollama) that wraps the GPU.',
+    'Add a CPU Instance or Kubernetes Cluster node.'),
+
+  // 4. K8s/CPU → OSS LLM direction (accept indirect via GPU: cpu→gpu→llm is valid)
+  ()=>{
+    if(!hasAny('llm-oss')||!hasAny('inf-k8s','inf-cpu')) return null;
+    // Direct connection is fine
+    if(flowsTo(['inf-k8s','inf-cpu'],'llm-oss')) return null;
+    // Indirect via GPU is also fine (cpu→gpu→llm is the canonical serving chain)
+    if(hasAny('inf-gpu')&&flowsTo(['inf-k8s','inf-cpu'],'inf-gpu')&&flowsTo('inf-gpu','llm-oss')) return null;
+    const bk=flowsTo('llm-oss',['inf-k8s','inf-cpu']);
+    return {level:'warning',
+      title: bk ? '⟵ Wrong direction: CPU / K8s must connect INTO Open Source LLM'
+                : 'CPU / K8s serving infrastructure not connected to Open Source LLM',
+      desc: bk ? 'Arrow is reversed. Output of CPU Instance or Kubernetes → Input of Open Source LLM (or via GPU Instance).'
+               : 'The CPU/K8s manages the container running the model. Connect it to the LLM directly or via GPU Instance. Canonical chain: CPU Instance → GPU Instance → Open Source LLM.',
+      fix:'Draw arrow: CPU Instance → GPU Instance → Open Source LLM (or CPU/K8s directly → Open Source LLM)',
+      arrow:'CPU / K8s → GPU Instance → Open Source LLM'};
+  },
+
+  // 5. Container registry presence
+  ()=>missing(hasAny('llm-oss')&&!hasAny('inf-reg'),[],'warning',
+    'No Container Registry for OSS model image',
+    'Self-hosted models are packaged as Docker images and distributed via a container registry to the serving cluster.',
+    'Add a Container Registry node.'),
+
+  // 6. Registry → K8s/CPU direction (NOT Registry → LLM)
+  ()=>{
+    if(!hasAny('llm-oss')||!hasAny('inf-reg')||!hasAny('inf-k8s','inf-cpu')) return null;
+    if(flowsTo('inf-reg',['inf-k8s','inf-cpu'])) return null;
+    const bk=flowsTo(['inf-k8s','inf-cpu'],'inf-reg');
+    return {level:'warning',
+      title: bk ? '⟵ Wrong direction: Container Registry → Kubernetes / CPU'
+                : 'Container Registry must connect to Kubernetes / CPU — not to Open Source LLM',
+      desc: bk ? 'Arrow is reversed. The cluster pulls images from the registry, not the other way around. Output of Container Registry → Input of Kubernetes Cluster or CPU Instance.'
+               : 'Container Registry stores the model Docker image. The K8s cluster or CPU instance pulls from it at deploy time. Output of Container Registry → Input of Kubernetes Cluster (or CPU Instance). Do NOT connect Registry directly to the LLM node.',
+      fix:'Draw arrow: Container Registry → Kubernetes Cluster (or CPU Instance)',
+      arrow:'Container Registry → Kubernetes Cluster'};
+  },
+
+  // ══════════════════════════════════════════════
+  // VECTOR DATABASE
+  // ══════════════════════════════════════════════
+
+  // 7. Embedding source presence
+  ()=>missing(hasAny('mem-vdb')&&!hasAny('llm-emb','pipe-embed'),[],'error',
+    'Vector Database needs an embedding source',
+    'A Vector DB stores vectors but cannot generate them. Without an Embedding Model or Pipeline writing to it, the VDB is empty and useless.',
+    'Add an Embedding Model or Embedding Pipeline node.'),
+
+  // 8. Embedding source → VDB direction
+  ()=>needsInput('mem-vdb',['llm-emb','pipe-embed'],'error',
+    'Embedding Model / Pipeline output must connect INTO Vector Database',
+    'Embeddings flow from the model/pipeline into the VDB. Output of Embedding Model or Embedding Pipeline → Input of Vector Database.'),
+
+  // 9. VDB must have an outgoing connection (retrieval)
+  ()=>missing(hasAny('mem-vdb')&&!hasOutgoing('mem-vdb'),[],'warning',
+    'Vector Database has no output connection',
+    'The VDB is being written to but nothing reads retrieved results from it. Retrieval output goes nowhere.',
+    'Draw arrow: Vector Database → LLM, Reranker Model, or Agent node.'),
+
+  // ══════════════════════════════════════════════
+  // EMBEDDING PIPELINE
+  // ══════════════════════════════════════════════
+
+  // 10. Model presence
+  ()=>missing(hasAny('pipe-embed')&&!hasAny('llm-emb','llm-oss'),[],'error',
+    'Embedding Pipeline needs a model to call',
+    'The pipeline orchestrates batch embedding jobs but needs a model to produce the vectors.',
+    'Add an Embedding Model node.'),
+
+  // 11. Embed pipeline ↔ model (either direction acceptable)
+  ()=>{
+    if(!hasAny('pipe-embed')||!hasAny('llm-emb','llm-oss')) return null;
+    if(linked('pipe-embed',['llm-emb','llm-oss'])) return null;
+    return {level:'error',
+      title:'Embedding Pipeline is not connected to an Embedding Model',
+      desc:'The Embedding Pipeline and Embedding Model are both on canvas but not wired together. The pipeline cannot produce vectors without calling the model.',
+      fix:'Draw arrow: Embedding Pipeline → Embedding Model (or bidirectional)',
+      arrow:'Embedding Pipeline ↔ Embedding Model'};
+  },
+
+  // 12. Model → VDB direction (if VDB present)
+  ()=>(!hasAny('pipe-embed')||!hasAny('mem-vdb')) ? null :
+    needsOutput(['llm-emb','pipe-embed'],'mem-vdb','error',
+      'Embedding output must flow INTO Vector Database',
+      'After generating vectors the pipeline/model writes them to the VDB. Output of Embedding Model or Pipeline → Input of Vector Database.'),
+
+  // ══════════════════════════════════════════════
+  // RERANKER
+  // ══════════════════════════════════════════════
+
+  // 13. VDB → Reranker
+  ()=>needsInput('llm-rerank','mem-vdb','error',
+    'Vector Database output must connect INTO Reranker',
+    'A Reranker re-scores candidate documents retrieved from the VDB. Output of Vector Database → Input of Reranker Model.'),
+
+  // 14. Reranker → LLM
+  ()=>needsOutput('llm-rerank',['llm-prop','llm-oss'],'warning',
+    'Reranker output must connect to an LLM',
+    'After re-scoring, top results are passed to the LLM as context. Output of Reranker Model → Input of LLM.'),
+
+  // ══════════════════════════════════════════════
+  // CHUNKER
+  // ══════════════════════════════════════════════
+
+  // 15. Chunker needs upstream input
+  ()=>missing(hasAny('pipe-chunk')&&!hasIncoming('pipe-chunk'),[],'warning',
+    'Chunker has no input connection',
+    'The Chunker splits text from an upstream source. Nothing is feeding into it.',
+    'Draw arrow: Data Ingestion → Chunker.'),
+
+  // 16. Chunker needs downstream output
+  ()=>missing(hasAny('pipe-chunk')&&!hasOutgoing('pipe-chunk'),[],'warning',
+    'Chunker has no output connection',
+    'The Chunker produces chunks but they go nowhere. Connect it to an Embedding Pipeline or LLM.',
+    'Draw arrow: Chunker → Embedding Pipeline or LLM.'),
+
+  // ══════════════════════════════════════════════
+  // DATA INGESTION
+  // ══════════════════════════════════════════════
+
+  // 17. Ingestion → Chunker (if chunker present)
+  ()=>needsOutput('pipe-ingest','pipe-chunk','warning',
+    'Data Ingestion output must connect to Chunker',
+    'Ingested raw documents should be split into chunks before embedding. Output of Data Ingestion → Input of Chunker.'),
+
+  // 18. Ingestion with no output at all
+  ()=>missing(hasAny('pipe-ingest')&&!hasOutgoing('pipe-ingest'),[],'warning',
+    'Data Ingestion has no output connection',
+    'Data is ingested but goes nowhere. Connect it downstream.',
+    'Draw arrow: Data Ingestion → Chunker or ETL / Transform.'),
+
+  // ══════════════════════════════════════════════
+  // AGENTS
+  // ══════════════════════════════════════════════
+
+  // 19. LLM presence for agents
+  ()=>{
+    const ag=['ag-plan','ag-exec','ag-eval','ag-router','ag-research','ag-coder'];
+    return missing(hasAny(...ag)&&!hasAny('llm-prop','llm-oss'),[],'error',
+      'Agents require an LLM',
+      'Agent nodes need an LLM as their reasoning engine. Without one, agents cannot make decisions.',
+      'Add a Proprietary LLM or Open Source LLM node.');
+  },
+
+  // 20. LLM ↔ agent connection (bidirectional acceptable)
+  ()=>{
+    const ag=['ag-plan','ag-exec','ag-eval','ag-router','ag-research','ag-coder'];
+    if(!hasAny(...ag)||!hasAny('llm-prop','llm-oss')) return null;
+    if(linked(['llm-prop','llm-oss'],ag)) return null;
+    return {level:'error',
+      title:'LLM is not connected to any Agent',
+      desc:'An LLM must be wired to agents. Agents send prompts to the LLM and receive decisions back. Connect in either direction depending on your flow.',
+      fix:'Draw arrow: LLM → Agent node (or Agent → LLM depending on flow direction)',
+      arrow:'LLM ↔ Agent node'};
+  },
+
+  // 21. Multiple agents need a router
+  ()=>{
+    const ag=['ag-plan','ag-exec','ag-eval','ag-research','ag-coder'];
+    return missing(countByIds(...ag)>=2&&!hasAny('ag-router'),[],'warning',
+      'Multiple agents need a Router / Orchestrator',
+      '2+ agent nodes with no Router means tasks are uncoordinated and there is no central failure handling.',
+      'Add a Router / Orchestrator node.');
+  },
+
+  // 22. Router → agents direction
+  ()=>{
+    const ag=['ag-plan','ag-exec','ag-eval','ag-research','ag-coder'];
+    if(!hasAny('ag-router')||!hasAny(...ag)) return null;
+    return needsOutput('ag-router',ag,'warning',
+      'Router / Orchestrator must connect OUT to Agent nodes',
+      'The Router dispatches tasks to agents. Its output port must connect to agent input ports. Output of Router → Input of Planner / Executor / etc.');
+  },
+
+  // 22b. Router must have an incoming connection (entry point)
+  ()=>{
+    if(!hasAny('ag-router')) return null;
+    if(hasIncoming('ag-router')) return null;
+    return {level:'warning',
+      title:'Router / Orchestrator has no incoming connection — no entry point',
+      desc:'The Router receives requests and dispatches them to agents. Without an incoming connection nothing triggers it. Every system needs an entry point feeding into the Router.',
+      fix:'Draw arrow: Load Balancer → Router, or Message Queue → Router, or Serverless Functions → Router.',
+      arrow:'Load Balancer / Message Queue / Serverless → Router / Orchestrator'};
+  },
+
+  // 23. Planner needs executor
+  ()=>missing(hasAny('ag-plan')&&!hasAny('ag-exec'),[],'warning',
+    'Planner Agent has no Executor to act on its plan',
+    'The Planner decomposes tasks but without an Executor Agent nothing carries them out.',
+    'Add an Executor Agent node.'),
+
+  // 24. Planner → Executor direction
+  ()=>needsOutput('ag-plan','ag-exec','warning',
+    'Planner Agent output must connect to Executor Agent',
+    'The Planner sends its task plan to the Executor. Output of Planner Agent → Input of Executor Agent.'),
+
+  // 25. Research agent → VDB
+  ()=>missing(hasAny('ag-research')&&!hasAny('mem-vdb'),[],'warning',
+    'Research Agent needs a Vector DB',
+    'Research Agents persist and retrieve findings using a Vector DB. Without it each step is stateless.',
+    'Add a Vector Database node.'),
+
+  // 26. Research agent ↔ VDB direction
+  ()=>missing(hasAny('ag-research')&&hasAny('mem-vdb')&&!linked('ag-research','mem-vdb'),[],'warning',
+    'Research Agent must be connected to Vector Database',
+    'The Research Agent writes findings to and reads from the VDB. Connect in both directions if storing and retrieving.',
+    'Draw arrow: Research Agent → Vector Database (write) and Vector Database → Research Agent (retrieve).'),
+
+  // 27. Code agent needs compute
+  ()=>missing(hasAny('ag-coder')&&!hasAny('inf-cpu','inf-gpu','inf-sl'),[],'error',
+    'Code Gen Agent needs a compute sandbox',
+    'The Code Gen Agent executes code to verify correctness. It needs a CPU Instance, GPU Instance, or Serverless Functions to run the sandbox.',
+    'Add a CPU Instance, GPU Instance, or Serverless Functions node.'),
+
+  // 28. Compute → code agent direction
+  ()=>needsInput('ag-coder',['inf-cpu','inf-gpu','inf-sl'],'error',
+    'Compute (CPU / GPU / Serverless) must connect INTO Code Gen Agent',
+    'The compute node provides the execution sandbox for the agent. Output of CPU / GPU / Serverless → Input of Code Gen Agent.'),
+
+  // ══════════════════════════════════════════════
+  // HUMAN-IN-THE-LOOP
+  // ══════════════════════════════════════════════
+
+  // 29. HITL needs incoming
+  ()=>missing(hasAny('ag-human')&&!hasIncoming('ag-human'),[],'warning',
+    'Human-in-the-Loop has no incoming connection',
+    'The HITL node is a review gate that must receive output from an agent or evaluator. Nothing is feeding into it so it will never trigger.',
+    'Draw arrow: Evaluator Agent or Executor Agent → Human-in-the-Loop.'),
+
+  // ══════════════════════════════════════════════
+  // FINE-TUNING PIPELINE
+  // ══════════════════════════════════════════════
+
+  // 30. GPU presence
+  ()=>missing(hasAny('pipe-ft')&&!hasAny('inf-gpu'),[],'error',
+    'Fine-tuning Pipeline requires a GPU',
+    'Fine-tuning (including LoRA/QLoRA) is computationally intensive and cannot be done on CPU at any practical scale.',
+    'Add a GPU Instance — A100 40GB minimum for most fine-tuning workloads.'),
+
+  // 31. GPU → fine-tune direction
+  ()=>needsInput('pipe-ft','inf-gpu','error',
+    'GPU Instance output must connect INTO Fine-tuning Pipeline',
+    'The GPU provides compute to the training job. Output of GPU Instance → Input of Fine-tuning Pipeline.'),
+
+  // 32. Dataset storage presence
+  ()=>missing(hasAny('pipe-ft')&&!hasAny('mem-blob','mem-sql'),[],'error',
+    'Fine-tuning Pipeline needs dataset storage',
+    'Training datasets must be stored and streamed from durable storage during fine-tuning.',
+    'Add a Blob / Object Store node for raw dataset files.'),
+
+  // 33. Storage → fine-tune direction
+  ()=>needsInput('pipe-ft',['mem-blob','mem-sql'],'error',
+    'Dataset storage output must connect INTO Fine-tuning Pipeline',
+    'The pipeline reads training data from storage. Output of Blob Store or Database → Input of Fine-tuning Pipeline.'),
+
+  // ══════════════════════════════════════════════
+  // STREAMING PIPELINE
+  // ══════════════════════════════════════════════
+
+  // 34. Queue presence
+  ()=>missing(hasAny('pipe-stream')&&!hasAny('inf-queue'),[],'error',
+    'Streaming Pipeline needs a Message Queue',
+    'A streaming pipeline requires a durable queue as its backbone for buffering, replay, and fan-out.',
+    'Add a Message Queue node.'),
+
+  // 35. Stream → queue direction
+  ()=>needsOutput('pipe-stream','inf-queue','error',
+    'Streaming Pipeline output must connect INTO Message Queue',
+    'The pipeline produces events that are buffered in the queue. Output of Streaming Pipeline → Input of Message Queue.'),
+
+  // ══════════════════════════════════════════════
+  // KUBERNETES
+  // ══════════════════════════════════════════════
+
+  // 36. Registry presence
+  ()=>missing(hasAny('inf-k8s')&&!hasAny('inf-reg'),[],'warning',
+    'Kubernetes Cluster needs a Container Registry',
+    'K8s pulls container images from a registry at deploy time. Without one you depend on public images.',
+    'Add a Container Registry node.'),
+
+  // 37. Registry → K8s direction
+  ()=>needsInput('inf-k8s','inf-reg','warning',
+    'Container Registry output must connect INTO Kubernetes Cluster',
+    'The K8s cluster pulls images from the registry. Output of Container Registry → Input of Kubernetes Cluster.'),
+
+  // 38. K8s has no outgoing connections
+  ()=>missing(hasAny('inf-k8s')&&!hasOutgoing('inf-k8s'),[],'warning',
+    'Kubernetes Cluster has no output connections',
+    'The cluster is provisioned but not serving anything downstream.',
+    'Draw arrow: Kubernetes Cluster → Open Source LLM or application service.'),
+
+  // ══════════════════════════════════════════════
+  // SEMANTIC CACHE
+  // ══════════════════════════════════════════════
+
+  // 39. Embedding model presence (only warn if no embedding model at all in design)
+  ()=>missing(hasAny('mem-cache')&&!hasAny('llm-emb','pipe-embed'),[],'warning',
+    'Semantic Cache needs an Embedding Model',
+    'Semantic caching embeds incoming queries and compares them to cached embeddings. Without an embedding model it can only do exact-match caching.',
+    'Add an Embedding Model node.'),
+
+  // 40. Embedding model should connect to cache (only if emb model present but truly isolated from cache)
+  ()=>{
+    if(!hasAny('mem-cache')||!hasAny('llm-emb','pipe-embed')) return null;
+    // Pass if: emb feeds cache directly, OR emb feeds vdb which feeds cache, OR cache and emb are in same connected subgraph
+    if(linked('mem-cache',['llm-emb','pipe-embed'])) return null;
+    return {level:'info',
+      title:'Consider connecting Embedding Model to Semantic Cache',
+      desc:'The cache can use the embedding model directly for query similarity. If your embedding model feeds the Vector DB which feeds the cache, this is handled indirectly and may be fine.',
+      fix:'Draw arrow: Embedding Model → Semantic Cache (optional if already indirectly connected via VDB)',
+      arrow:'Embedding Model → Semantic Cache'};
+  },
+
+  // 41. Cache ↔ LLM connection
+  ()=>missing(hasAny('mem-cache')&&hasAny('llm-prop','llm-oss')&&!linked('mem-cache',['llm-prop','llm-oss']),[],'warning',
+    'Semantic Cache not connected to any LLM',
+    'The cache sits in front of the LLM to intercept repeated queries. Connect it in the request path.',
+    'Draw arrow: Semantic Cache → LLM (cache checks first), and LLM → Semantic Cache (to store new responses).'),
+
+  // ══════════════════════════════════════════════
+  // PROMPT LOGGER
+  // ══════════════════════════════════════════════
+
+  // 42. Logger presence
+  ()=>missing(countCat('LLM')>0&&!hasAny('obs-plog'),[],'warning',
+    'No Prompt Logger — LLM calls are untracked',
+    'Without a Prompt Logger you have no record of prompts or responses, making debugging and auditing impossible.',
+    'Add a Prompt Logger node.'),
+
+  // 43. LLM → Logger direction (not Logger → LLM)
+  ()=>needsOutput(['llm-prop','llm-oss'],'obs-plog','warning',
+    'LLM output must connect INTO Prompt Logger',
+    'LLM responses are logged by sending output to the Prompt Logger — not the other way around. Output of LLM → Input of Prompt Logger.'),
+
+  // ══════════════════════════════════════════════
+  // EVAL HARNESS
+  // ══════════════════════════════════════════════
+
+  // 44. LLM presence
+  ()=>missing(hasAny('obs-evalharness')&&!hasAny('llm-prop','llm-oss'),[],'warning',
+    'Eval Harness has no LLM to evaluate',
+    'The Eval Harness measures LLM output quality. Without an LLM there is nothing to evaluate.',
+    'Add an LLM node.'),
+
+  // 45. Something must feed Eval Harness
+  ()=>missing(hasAny('obs-evalharness')&&!hasIncoming('obs-evalharness'),[],'warning',
+    'Eval Harness has no incoming connection',
+    'The Eval Harness evaluates outputs fed into it. Without an incoming connection it evaluates nothing.',
+    'Draw arrow: Prompt Logger or LLM → Eval Harness.'),
+
+  // ══════════════════════════════════════════════
+  // ISOLATED / ORPHANED NODES
+  // ══════════════════════════════════════════════
+
+  // 46. GPU isolated
+  ()=>missing(hasAny('inf-gpu')&&isIsolated('inf-gpu'),[],'error',
+    'GPU Instance is isolated — zero connections',
+    'The GPU is on canvas but not wired to anything. It provides no compute to any node.',
+    'Draw arrow: GPU Instance → Open Source LLM (or Fine-tuning Pipeline).'),
+
+  // 47. Load balancer isolated
+  ()=>missing(hasAny('inf-lb')&&isIsolated('inf-lb'),[],'warning',
+    'Load Balancer is isolated — zero connections',
+    'The Load Balancer receives no traffic and routes to nothing.',
+    'Draw arrow: Load Balancer → Router / Orchestrator or LLM node.'),
+
+  // 48. Message queue isolated
+  ()=>missing(hasAny('inf-queue')&&isIsolated('inf-queue'),[],'warning',
+    'Message Queue is isolated — zero connections',
+    'No producer feeds the queue and no consumer reads from it.',
+    'Draw arrow: Streaming Pipeline → Message Queue → downstream consumer.'),
+
+  // 49. Isolated observability nodes
+  ()=>{
+    const obsIds=['obs-logger','obs-tracer','obs-metric','obs-evalharness','obs-plog','obs-dash'];
+    const bad=obsIds.filter(id=>hasAny(id)&&isIsolated(id));
+    if(!bad.length) return null;
+    const names=bad.map(cname).join(', ');
+    return {level:'warning',
+      title:'Isolated observability node'+(bad.length>1?'s':'')+': '+names,
+      desc:(bad.length>1?'These observability nodes are':'This observability node is')+' on canvas but have no connections. They will collect nothing.',
+      fix:'Draw arrows from LLM, Agent, or Infrastructure nodes into your observability nodes.',
+      arrow:'LLM / Agent / Infra → Observability node'};
+  },
+
+  // ══════════════════════════════════════════════
+  // MEMORY / LLM TOPOLOGY
+  // ══════════════════════════════════════════════
+
+  // 50. LLM fully stateless
+  ()=>{
+    if(!hasAny('llm-prop','llm-oss')) return null;
+    const m=['mem-vdb','mem-cache','mem-kv','mem-sql','mem-graph','mem-contextwindow','mem-blob'];
+    return missing(!hasAny(...m),[],'warning',
+      'LLM has no memory — fully stateless',
+      'No memory or storage is connected. Every request starts fresh with no context, history, or retrieved knowledge.',
+      'Add a memory node: Vector DB (retrieval), Context Window (conversation), or KV Store (session state).');
+  },
+
+  // 51. Memory nodes present but not wired to LLM
+  ()=>{
+    if(!hasAny('llm-prop','llm-oss')) return null;
+    const m=['mem-vdb','mem-cache','mem-kv','mem-sql','mem-graph','mem-contextwindow'];
+    if(!hasAny(...m)||linked(['llm-prop','llm-oss'],m)) return null;
+    return {level:'warning',
+      title:'Memory node is not connected to any LLM',
+      desc:'Memory nodes are on canvas but none are wired to the LLM. The LLM cannot read from or write to disconnected memory.',
+      fix:'Draw arrow: Memory node → LLM (for retrieval input) or LLM → Memory node (for write/store)',
+      arrow:'Memory node ↔ LLM'};
+  },
+
+  // ══════════════════════════════════════════════
+  // SUGGESTIONS
+  // ══════════════════════════════════════════════
+
+  ()=>missing((countCat('LLM')>0||countCat('Infra')>0)&&!hasAny('obs-metric','obs-dash'),[],'info',
+    'No metrics or monitoring configured',
+    'Without Metrics/Monitoring you have no visibility into latency, error rates, or throughput.',
+    'Add a Metrics / Monitoring or Dashboard / Alerting node.'),
+
+  ()=>missing(Object.keys(nodes).length>=6&&!hasAny('obs-costmon'),[],'info',
+    'No Cost Monitor on a complex build',
+    'At this scale, API and cloud costs can spike unexpectedly. A Cost Monitor with alerts catches runaway spend.',
+    'Add a Cost Monitor node and configure spend alerts.'),
+
+  ()=>missing(hasAny('inf-k8s')&&!hasAny('inf-lb'),[],'info',
+    'Consider a Load Balancer in front of Kubernetes',
+    'Production K8s clusters serving external traffic typically sit behind a load balancer for routing, SSL termination, and failover.',
+    'Add a Load Balancer node and connect Load Balancer → Kubernetes Cluster.'),
+
+  ()=>Object.keys(nodes).length>0 ? null : {
+    level:'info',title:'Canvas is empty',
+    desc:'Add components from the left palette or load a template to get started.',
+    fix:null,arrow:null},
+
+];
+
+function runValidation() {
+  const issues = VALIDATION_RULES.map(rule=>{ try{return rule();}catch(e){return null;} }).filter(Boolean);
+  const errors   = issues.filter(i=>i.level==='error');
+  const warnings = issues.filter(i=>i.level==='warning');
+  const infos    = issues.filter(i=>i.level==='info');
+
+  const rawScore = Math.max(0, 100 - errors.length*15 - warnings.length*5);
+  const score = Object.keys(nodes).length===0 ? 0 : rawScore;
+
+  const parts=[];
+  if(errors.length)   parts.push(errors.length+' error'+(errors.length>1?'s':''));
+  if(warnings.length) parts.push(warnings.length+' warning'+(warnings.length>1?'s':''));
+  if(infos.length)    parts.push(infos.length+' suggestion'+(infos.length>1?'s':''));
+  document.getElementById('vp-summary').textContent = parts.length ? parts.join(' · ') : 'No issues found';
+
+  const bar = document.getElementById('vp-score-bar');
+  bar.style.width='0%';
+  bar.style.background = score>=80?'#1D9E75':score>=50?'#BA7517':'#c0392b';
+  document.getElementById('vp-score-val').textContent = score+'/100';
+  document.getElementById('vp-score-val').style.color  = score>=80?'#1D9E75':score>=50?'#BA7517':'#c0392b';
+
+  const body = document.getElementById('vp-body');
+  body.innerHTML='';
+
+  if(issues.length===0){
+    body.innerHTML=`<div class="vp-empty">
+      <div class="vp-empty-icon">✓</div>
+      <div style="font-weight:600;color:var(--text);margin-bottom:4px">Build looks good!</div>
+      <div>All nodes are correctly connected and no dependencies are missing.</div>
+    </div>`;
+  } else {
+    const icon={
+      error  :`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>`,
+      warning:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>`,
+      info   :`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>`,
+    };
+    [{level:'error',label:'Errors — build will not work'},
+     {level:'warning',label:'Warnings — build may have issues'},
+     {level:'info',label:'Suggestions'}
+    ].forEach(({level,label})=>{
+      const group=issues.filter(i=>i.level===level);
+      if(!group.length) return;
+      const hdr=document.createElement('div');
+      hdr.className='vi-section-header';
+      hdr.textContent=label;
+      body.appendChild(hdr);
+      group.forEach(issue=>{
+        const div=document.createElement('div');
+        div.className='vi-item '+level;
+        // Arrow badge if present
+        const arrowBadge = issue.arrow
+          ? `<div style="display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:4px 10px;background:var(--bg2);border:0.5px solid var(--border2);border-radius:6px;font-size:11px;font-weight:600;font-family:monospace;color:var(--text)">${issue.arrow}</div>`
+          : '';
+        div.innerHTML=`
+          <div class="vi-icon ${level}">${icon[level]}</div>
+          <div class="vi-content">
+            <div class="vi-title">${issue.title}</div>
+            <div class="vi-desc">${issue.desc}</div>
+            ${issue.fix?`<div class="vi-fix">→ ${issue.fix}</div>`:''}
+            ${arrowBadge}
+          </div>`;
+        body.appendChild(div);
+      });
+    });
+  }
+
+  document.getElementById('validation-overlay').style.display='flex';
+  setTimeout(()=>{ bar.style.width=score+'%'; },60);
+}
+
+function closeValidation() {
+  document.getElementById('validation-overlay').style.display='none';
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('validation-overlay').addEventListener('mousedown',e=>{
+    if(e.target===document.getElementById('validation-overlay')) closeValidation();
+  });
+});
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape') closeValidation();
+});
+
+buildPalette();
+initSVGDefs();
+drawGrid();
+updateSidebar();
+window.addEventListener('resize', () => { drawGrid(); renderConnections(); });
+</script>
+</body>
+</html>
